@@ -18,7 +18,9 @@ package org.drools.modelcompiler;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.base.ClassObjectType;
@@ -47,6 +49,8 @@ public class KnowledgePackagesBuilder {
 
     private Map<String, KnowledgePackage> packages = new HashMap<>();
 
+    private Set<Class<?>> patternClasses = new HashSet<>();
+
     public KnowledgePackagesBuilder(KieBaseConfiguration conf) {
         this.configuration = ( (RuleBaseConfiguration) conf );
     }
@@ -58,7 +62,11 @@ public class KnowledgePackagesBuilder {
         }
     }
 
-    private RuleImpl compileRule(Rule rule) {
+    public Collection<Class<?>> getPatternClasses() {
+        return patternClasses;
+    }
+
+    private RuleImpl compileRule( Rule rule ) {
         RuleImpl ruleImpl = new RuleImpl( rule.getName() );
         ruleImpl.setPackage( rule.getPackge() );
         RuleContext ctx = new RuleContext();
@@ -75,10 +83,13 @@ public class KnowledgePackagesBuilder {
         switch (condition.getType()) {
             case PATTERN:
                 org.drools.model.Pattern modelPattern = (org.drools.model.Pattern) condition;
+                Class<?> patternClass = modelPattern.getPatternVariable().getType().asClass();
+                patternClasses.add( patternClass );
+
                 Variable patternVariable = modelPattern.getPatternVariable();
                 Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
                                                0, // offset is 0 by default
-                                               new ClassObjectType( modelPattern.getPatternVariable().getType().asClass() ),
+                                               new ClassObjectType( patternClass ),
                                                ctx.getPatternId( patternVariable ),
                                                true );
                 ctx.registerPattern( patternVariable, pattern );

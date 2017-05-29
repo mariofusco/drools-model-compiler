@@ -1,8 +1,11 @@
 package org.drools.modelcompiler.constraints;
 
+import java.util.List;
+
 import org.drools.core.base.field.ObjectFieldImpl;
 import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemory;
+import org.drools.core.reteoo.PropertySpecificUtil;
 import org.drools.core.rule.ContextEntry;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.IndexableConstraint;
@@ -12,9 +15,12 @@ import org.drools.core.spi.FieldValue;
 import org.drools.core.spi.InternalReadAccessor;
 import org.drools.core.spi.Tuple;
 import org.drools.core.util.AbstractHashTable.FieldIndex;
+import org.drools.core.util.bitmask.BitMask;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.model.AlphaIndex;
 import org.drools.model.Index;
+
+import static org.drools.core.reteoo.PropertySpecificUtil.getEmptyPropertyReactiveMask;
 
 public class LambdaConstraint extends MutableTypeConstraint implements IndexableConstraint {
 
@@ -44,8 +50,25 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
     }
 
     @Override
+    public BitMask getListenedPropertyMask( List<String> settableProperties ) {
+        if (evaluator.getReactiveProps() == null) {
+            return super.getListenedPropertyMask( settableProperties );
+        }
+        BitMask mask = getEmptyPropertyReactiveMask(settableProperties.size());
+        for (String prop : evaluator.getReactiveProps()) {
+            int pos = settableProperties.indexOf(prop);
+            if (pos >= 0) { // Ignore not settable properties
+                mask = mask.set( pos + PropertySpecificUtil.CUSTOM_BITS_OFFSET );
+            } else {
+                throw new RuntimeException( "Unknown property: " + prop );
+            }
+        }
+        return mask;
+    }
+
+    @Override
     public void replaceDeclaration(Declaration oldDecl, Declaration newDecl) {
-        throw new UnsupportedOperationException("org.drools.retebuilder.constraints.LambdaConstraint.replaceDeclaration -> TODO");
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -55,7 +78,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public boolean isTemporal() {
-        throw new UnsupportedOperationException("org.drools.retebuilder.constraints.LambdaConstraint.isTemporal -> TODO");
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -70,7 +93,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public boolean isAllowedCachedRight(Tuple tuple, ContextEntry context) {
-        throw new UnsupportedOperationException("org.drools.retebuilder.constraints.LambdaConstraint.isAllowedCachedRight -> TODO");
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -80,7 +103,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public boolean isUnification() {
-        throw new UnsupportedOperationException( "org.drools.retebuilder.constraints.LambdaConstraint.isUnification -> TODO" );
+        throw new UnsupportedOperationException();
 
     }
 

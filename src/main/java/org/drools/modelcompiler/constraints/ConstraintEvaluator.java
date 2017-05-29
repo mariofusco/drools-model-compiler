@@ -15,12 +15,14 @@ public class ConstraintEvaluator {
     private final String id;
     private final PredicateN predicate;
     private final Index index;
+    private final String[] reactiveProps;
     private final int[] argsPos;
 
     public ConstraintEvaluator(Pattern pattern, SingleConstraint constraint) {
         this.id = constraint.getExprId();
         this.predicate = constraint.getPredicate();
         this.index = constraint.getIndex();
+        this.reactiveProps = constraint.getReactiveProps();
         this.argsPos = findArgsPos(pattern, constraint.getVariables());
     }
 
@@ -34,6 +36,10 @@ public class ConstraintEvaluator {
 
     public Index getIndex() {
         return index;
+    }
+
+    public String[] getReactiveProps() {
+        return reactiveProps;
     }
 
     @Override

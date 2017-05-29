@@ -43,8 +43,6 @@ import org.kie.api.builder.model.KieSessionModel;
 import org.kie.api.io.Resource;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
-import org.kie.internal.KnowledgeBaseFactory;
-import org.kie.internal.definition.KnowledgePackage;
 
 import static org.junit.Assert.assertTrue;
 
@@ -150,31 +148,9 @@ public class BuildFromKJarTest {
 
         @Override
         public InternalKnowledgeBase createKieBase( KieBaseModelImpl kBaseModel, KieProject kieProject, ResultsImpl messages, KieBaseConfiguration conf ) {
-            KnowledgePackagesBuilder builder = new KnowledgePackagesBuilder(conf);
-
             KieProjectClassLoader kieProjectCL = new KieProjectClassLoader(kieProject);
             Model model = kieProjectCL.createInstance( "mymodel.Rules" );
-            builder.addModel(model);
-
-            Collection<KnowledgePackage> pkgs = builder.getKnowledgePackages();
-            ClassLoader cl = kieProject.getClassLoader();
-            if (conf == null) {
-                conf = getKnowledgeBaseConfiguration(kBaseModel, cl);
-            } else if (conf instanceof RuleBaseConfiguration ) {
-                ((RuleBaseConfiguration)conf).setClassLoader(cl);
-            }
-
-            InternalKnowledgeBase kBase = (InternalKnowledgeBase) KnowledgeBaseFactory.newKnowledgeBase( kBaseModel.getName(), conf );
-            kBase.addKnowledgePackages( pkgs );
-            return kBase;
-        }
-
-        private KieBaseConfiguration getKnowledgeBaseConfiguration(KieBaseModelImpl kBaseModel, ClassLoader cl) {
-            KieBaseConfiguration kbConf = KnowledgeBaseFactory.newKnowledgeBaseConfiguration(null, cl);
-            kbConf.setOption(kBaseModel.getEqualsBehavior());
-            kbConf.setOption(kBaseModel.getEventProcessingMode());
-            kbConf.setOption(kBaseModel.getDeclarativeAgenda());
-            return kbConf;
+            return KieBaseBuilder.createKieBase( model, kBaseModel, kieProject.getClassLoader(), conf );
         }
 
         class KieProjectClassLoader extends ClassLoader {
@@ -228,7 +204,9 @@ public class BuildFromKJarTest {
                "        Variable<Person> olderV = variableOf( type( Person.class ) );\n" +
                "        Rule rule = rule( \"beta\" )\n" +
                "                .view(\n" +
-               "                        expr(markV, p -> p.getName().equals(\"Mark\")).indexedBy( ConstraintType.EQUAL, Person::getName, \"Mark\" ),\n" +
+               "                        expr(markV, p -> p.getName().equals(\"Mark\"))\n" +
+               "                                .indexedBy( ConstraintType.EQUAL, Person::getName, \"Mark\" )\n" +
+               "                                .reactOn( \"name\" ),\n" +
                "                        expr(olderV, p -> !p.getName().equals(\"Mark\")),\n" +
                "                        expr(olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())\n" +
                "                     )\n" +
