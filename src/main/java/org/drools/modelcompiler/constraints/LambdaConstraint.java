@@ -2,6 +2,7 @@ package org.drools.modelcompiler.constraints;
 
 import java.util.List;
 
+import org.drools.core.base.ValueType;
 import org.drools.core.base.field.ObjectFieldImpl;
 import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemory;
@@ -39,8 +40,11 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
     private void initIndexes() {
         Index index = evaluator.getIndex();
         if (index instanceof AlphaIndex) {
-            field = new ObjectFieldImpl( ( (AlphaIndex) index ).getRightValue() );
-            readAccessor = new LambdaReadAccessor( ( (AlphaIndex) index ).getLeftOperandExtractor() );
+            Object value = ( (AlphaIndex) index ).getRightValue();
+            field = new ObjectFieldImpl( value );
+            ValueType vType = ValueType.determineValueType( value.getClass() );
+            // TODO index ???
+            readAccessor = new LambdaReadAccessor( 0, value.getClass(), vType, ( (AlphaIndex) index ).getLeftOperandExtractor() );
         }
     }
 
@@ -93,7 +97,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public boolean isAllowedCachedRight(Tuple tuple, ContextEntry context) {
-        throw new UnsupportedOperationException();
+        return evaluator.evaluate(((LambdaContextEntry) context).getHandle(), tuple);
     }
 
     @Override
@@ -143,8 +147,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public FieldIndex getFieldIndex() {
-        throw new UnsupportedOperationException( "org.drools.retebuilder.constraints.LambdaConstraint.getFieldIndex -> TODO" );
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -155,6 +158,9 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
     public static class LambdaContextEntry extends MvelConstraint.MvelContextEntry {
         Tuple getTuple() {
             return tuple;
+        }
+        InternalFactHandle getHandle() {
+            return rightHandle;
         }
     }
 

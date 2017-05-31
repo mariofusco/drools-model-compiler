@@ -16,6 +16,7 @@
 
 package org.drools.modelcompiler.constraints;
 
+import org.drools.core.base.ValueType;
 import org.drools.core.base.extractors.BaseObjectClassFieldReader;
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.spi.InternalReadAccessor;
@@ -25,7 +26,8 @@ public class LambdaReadAccessor extends BaseObjectClassFieldReader implements In
 
     private final Function1 lambda;
 
-    public LambdaReadAccessor( Function1 lambda ) {
+    public LambdaReadAccessor( int index, Class<?> fieldType, ValueType valueType, Function1 lambda ) {
+        super(index, fieldType, valueType);
         this.lambda = lambda;
     }
 

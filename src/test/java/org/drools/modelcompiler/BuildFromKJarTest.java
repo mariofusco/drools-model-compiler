@@ -19,23 +19,16 @@ package org.drools.modelcompiler;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Collection;
+import java.util.List;
 
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
-import org.drools.compiler.kie.builder.impl.KieProject;
-import org.drools.compiler.kie.builder.impl.ResultsImpl;
-import org.drools.compiler.kie.builder.impl.ZipKieModule;
-import org.drools.compiler.kproject.models.KieBaseModelImpl;
-import org.drools.core.RuleBaseConfiguration;
-import org.drools.core.impl.InternalKnowledgeBase;
-import org.drools.model.Model;
 import org.junit.Test;
-import org.kie.api.KieBaseConfiguration;
 import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
 import org.kie.api.builder.KieFileSystem;
 import org.kie.api.builder.KieModule;
 import org.kie.api.builder.KieRepository;
+import org.kie.api.builder.Message;
 import org.kie.api.builder.ReleaseId;
 import org.kie.api.builder.model.KieBaseModel;
 import org.kie.api.builder.model.KieModuleModel;
@@ -44,7 +37,7 @@ import org.kie.api.io.Resource;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class BuildFromKJarTest {
 
@@ -87,10 +80,14 @@ public class BuildFromKJarTest {
         kfs.write( "src/main/java/" + javaSrc, javaResource );
 
 //        kfs.write("src/main/resources/rule.drl", getRule());
+        kfs.write("src/main/java/mymodel/Variables.java", getVariableSource());
         kfs.write("src/main/java/mymodel/Rules.java", getRuleModelSource());
 
         KieBuilder kieBuilder = ks.newKieBuilder( kfs );
-        assertTrue(kieBuilder.buildAll().getResults().getMessages().isEmpty());
+        List<Message> messages = kieBuilder.buildAll().getResults().getMessages();
+        if (!messages.isEmpty()) {
+            fail(messages.toString());
+        }
 
         InternalKieModule kieModule = (InternalKieModule) kieBuilder.getKieModule();
         return bytesToFile( releaseId, kieModule.getBytes(), ".jar" );
@@ -141,46 +138,18 @@ public class BuildFromKJarTest {
         return file;
     }
 
-    public static class CanonicalKieModule extends ZipKieModule {
-        public CanonicalKieModule( ReleaseId releaseId, KieModuleModel kieProject, File file ) {
-            super( releaseId, kieProject, file );
-        }
-
-        @Override
-        public InternalKnowledgeBase createKieBase( KieBaseModelImpl kBaseModel, KieProject kieProject, ResultsImpl messages, KieBaseConfiguration conf ) {
-            KieProjectClassLoader kieProjectCL = new KieProjectClassLoader(kieProject);
-            Model model = kieProjectCL.createInstance( "mymodel.Rules" );
-            return KieBaseBuilder.createKieBase( model, kBaseModel, kieProject.getClassLoader(), conf );
-        }
-
-        class KieProjectClassLoader extends ClassLoader {
-            public KieProjectClassLoader(KieProject kieProject) {
-                super(kieProject.getClassLoader());
-            }
-
-            public Class<?> loadClass(String className) throws ClassNotFoundException {
-                try {
-                    return super.loadClass( className );
-                } catch (ClassNotFoundException cnfe) { }
-
-                String fileName = className.replace( '.', '/' ) + ".class";
-                byte[] bytes = getBytes(fileName);
-
-                if (bytes == null) {
-                    throw new ClassNotFoundException(className);
-                }
-
-                return defineClass(className, bytes, 0, bytes.length);
-            }
-
-            public <T> T createInstance(String className) {
-                try {
-                    return (T) loadClass( className ).newInstance();
-                } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
-                    throw new RuntimeException( e );
-                }
-            }
-        }
+    private String getVariableSource() {
+        return "package mymodel;\n" +
+               "" +
+               "import org.drools.model.*;\n" +
+               "import static org.drools.model.DSL.*;\n" +
+               "import " + Person.class.getCanonicalName() + ";\n" +
+               "" +
+               "public class Variables {\n" +
+               "" +
+               "    public static final Variable<Person> markV = variableOf( type( Person.class ) );\n" +
+               "    public static final Variable<Person> olderV = variableOf( type( Person.class ) );\n" +
+               "}\n";
     }
 
     private String getRuleModelSource() {
@@ -192,7 +161,11 @@ public class BuildFromKJarTest {
                "import " + Person.class.getCanonicalName() + ";\n" +
                "import org.drools.model.Index.ConstraintType;\n" +
                "" +
+               "import static mymodel.Variables.*;\n" +
+               "" +
                "public class Rules implements Model {\n" +
+               "" +
+               "    int a;\n" + // workaround for ecj bug!
                "" +
                "    @Override\n" +
                "    public List<Rule> getRules() {\n" +
@@ -200,15 +173,15 @@ public class BuildFromKJarTest {
                "    }\n" +
                "" +
                "    private Rule rule1() {\n" +
-               "        Variable<Person> markV = variableOf( type( Person.class ) );\n" +
-               "        Variable<Person> olderV = variableOf( type( Person.class ) );\n" +
                "        Rule rule = rule( \"beta\" )\n" +
                "                .view(\n" +
                "                        expr(markV, p -> p.getName().equals(\"Mark\"))\n" +
                "                                .indexedBy( ConstraintType.EQUAL, Person::getName, \"Mark\" )\n" +
+               "                                .reactOn( \"name\", \"age\" ),\n" +
+               "                        expr(olderV, p -> !p.getName().equals(\"Mark\"))\n" +
                "                                .reactOn( \"name\" ),\n" +
-               "                        expr(olderV, p -> !p.getName().equals(\"Mark\")),\n" +
                "                        expr(olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())\n" +
+               "                                .reactOn( \"age\" )\n" +
                "                     )\n" +
                "                .then(c -> c.on(olderV, markV)\n" +
                "                            .execute( (p1, p2) -> System.out.println( p1.getName() + \" is older than \" + p2.getName() ) ) );\n" +

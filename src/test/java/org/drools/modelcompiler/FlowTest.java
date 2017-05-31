@@ -25,10 +25,12 @@ import org.drools.model.Rule;
 import org.drools.model.Variable;
 import org.junit.Test;
 import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.rule.FactHandle;
 
 import static java.util.Arrays.asList;
 import static org.drools.model.DSL.*;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class FlowTest {
     @Test
@@ -41,25 +43,42 @@ public class FlowTest {
 
         Rule rule = rule( "beta" )
                 .view(
-                        expr(markV, p -> p.getName().equals("Mark"))
+                        expr("exprA", markV, p -> p.getName().equals("Mark"))
                                 .indexedBy( ConstraintType.EQUAL, Person::getName, "Mark" )
+                                .reactOn( "name", "age" ), // also react on age, see RuleDescr.lookAheadFieldsOfIdentifier
+                        expr("exprB", olderV, p -> !p.getName().equals("Mark"))
                                 .reactOn( "name" ),
-                        expr(olderV, p -> !p.getName().equals("Mark")),
-                        expr(olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())
+                        expr("exprC", olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())
+                                .reactOn( "age" )
                      )
                 .then(c -> c.on(olderV, markV)
                             .execute((p1, p2) -> result.value = p1.getName() + " is older than " + p2.getName()));
 
-        InternalKnowledgeBase kieBase = KieBaseBuilder.createKieBase( () -> asList( rule ) );
+        InternalKnowledgeBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
 
         KieSession ksession = kieBase.newKieSession();
 
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Edson", 35));
-        ksession.insert(new Person("Mario", 40));
+        Person mark = new Person("Mark", 37);
+        Person edson = new Person("Edson", 35);
+        Person mario = new Person("Mario", 40);
+
+        FactHandle markFH = ksession.insert(mark);
+        FactHandle edsonFH = ksession.insert(edson);
+        FactHandle marioFH = ksession.insert(mario);
 
         ksession.fireAllRules();
         assertEquals("Mario is older than Mark", result.value);
+
+        result.value = null;
+        ksession.delete( marioFH );
+        ksession.fireAllRules();
+        assertNull(result.value);
+
+        mark.setAge( 34 );
+        ksession.update( markFH, mark, "age" );
+
+        ksession.fireAllRules();
+        assertEquals("Edson is older than Mark", result.value);
     }
 
     private static class Result {

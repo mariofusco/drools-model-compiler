@@ -28,27 +28,37 @@ import org.kie.internal.definition.KnowledgePackage;
 
 public class KieBaseBuilder {
 
-    public static InternalKnowledgeBase createKieBase( Model model ) {
-        return createKieBase( model, null, KieBaseBuilder.class.getClassLoader(), null );
+    private final KnowledgePackagesBuilder builder;
+    private final String kBaseName;
+    private final KieBaseConfiguration conf;
+
+    public KieBaseBuilder() {
+        this(null, KieBaseBuilder.class.getClassLoader(), null);
     }
 
-    public static InternalKnowledgeBase createKieBase( Model model, KieBaseModelImpl kBaseModel, ClassLoader cl, KieBaseConfiguration conf ) {
+    public KieBaseBuilder(KieBaseModelImpl kBaseModel, ClassLoader cl, KieBaseConfiguration conf) {
         if (conf == null) {
             conf = getKnowledgeBaseConfiguration(kBaseModel, cl);
         } else if (conf instanceof RuleBaseConfiguration ) {
             ((RuleBaseConfiguration)conf).setClassLoader(cl);
         }
 
-        KnowledgePackagesBuilder builder = new KnowledgePackagesBuilder(conf);
-        builder.addModel(model);
+        this.kBaseName = kBaseModel != null ? kBaseModel.getName() : "defaultkiebase";
+        this.conf = conf;
+        this.builder = new KnowledgePackagesBuilder(conf);
+    }
 
-        String kBaseName = kBaseModel != null ? kBaseModel.getName() : "defaultkiebase";
-
+    public InternalKnowledgeBase createKieBase() {
         Collection<KnowledgePackage> pkgs = builder.getKnowledgePackages();
         InternalKnowledgeBase kBase = (InternalKnowledgeBase) KnowledgeBaseFactory.newKnowledgeBase( kBaseName, conf );
         builder.getPatternClasses().forEach( kBase::getOrCreateExactTypeDeclaration );
         kBase.addKnowledgePackages( pkgs );
         return kBase;
+    }
+
+    public KieBaseBuilder addModel( Model model ) {
+        builder.addModel(model);
+        return this;
     }
 
     private static KieBaseConfiguration getKnowledgeBaseConfiguration( KieBaseModelImpl kBaseModel, ClassLoader cl ) {
@@ -59,5 +69,9 @@ public class KieBaseBuilder {
             kbConf.setOption( kBaseModel.getDeclarativeAgenda() );
         }
         return kbConf;
+    }
+
+    public static InternalKnowledgeBase createKieBaseFromModel( Model model ) {
+        return new KieBaseBuilder().addModel( model ).createKieBase();
     }
 }
