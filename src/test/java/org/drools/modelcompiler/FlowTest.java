@@ -33,6 +33,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class FlowTest {
+
     @Test
     public void testBeta() {
         Result result = new Result();
@@ -79,6 +80,73 @@ public class FlowTest {
 
         ksession.fireAllRules();
         assertEquals("Edson is older than Mark", result.value);
+    }
+
+    @Test
+    public void test3Patterns() {
+        Result result = new Result();
+
+        List<String> list = new ArrayList<>();
+        Variable<Person> personV = variableOf( type( Person.class ) );
+        Variable<Person> markV = variableOf( type( Person.class ) );
+        Variable<String> nameV = variableOf( type( String.class ) );
+
+        Rule rule = rule( "myrule" )
+                .view(
+                        expr("exprA", markV, p -> p.getName().equals("Mark")),
+                        expr("exprB", personV, markV, (p1, p2) -> p1.getAge() > p2.getAge()),
+                        expr("exprC", nameV, personV, (s, p) -> s.equals( p.getName() ))
+                     )
+                .then(c -> c.on(nameV)
+                            .execute(s -> result.value = s));
+
+        InternalKnowledgeBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ksession.insert( "Mario" );
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Edson", 35));
+        ksession.insert(new Person("Mario", 40));
+        ksession.fireAllRules();
+
+        assertEquals("Mario", result.value);
+    }
+
+    @Test
+    public void testOr() {
+        Result result = new Result();
+
+        List<String> list = new ArrayList<>();
+        Variable<Person> personV = variableOf( type( Person.class ) );
+        Variable<Person> markV = variableOf( type( Person.class ) );
+        Variable<String> nameV = variableOf( type( String.class ) );
+
+        Rule rule = rule( "or" )
+                .view(
+                        or(
+                            expr("exprA", personV, p -> p.getName().equals("Mark")),
+                            and(
+                                    expr("exprA", markV, p -> p.getName().equals("Mark")),
+                                    expr("exprB", personV, markV, (p1, p2) -> p1.getAge() > p2.getAge())
+                               )
+                          ),
+                        expr("exprC", nameV, personV, (s, p) -> s.equals( p.getName() ))
+                     )
+                .then(c -> c.on(nameV)
+                            .execute(s -> result.value = s));
+
+        InternalKnowledgeBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ksession.insert( "Mario" );
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Edson", 35));
+        ksession.insert(new Person("Mario", 40));
+        ksession.fireAllRules();
+
+        assertEquals("Mario", result.value);
     }
 
     private static class Result {

@@ -26,14 +26,12 @@ import static org.drools.core.reteoo.PropertySpecificUtil.getEmptyPropertyReacti
 public class LambdaConstraint extends MutableTypeConstraint implements IndexableConstraint {
 
     private final ConstraintEvaluator evaluator;
-    private final Declaration[] requiredDeclarations;
 
     private FieldValue field;
     private InternalReadAccessor readAccessor;
 
-    public LambdaConstraint(ConstraintEvaluator evaluator, Declaration[] requiredDeclarations) {
+    public LambdaConstraint(ConstraintEvaluator evaluator) {
         this.evaluator = evaluator;
-        this.requiredDeclarations = requiredDeclarations;
         initIndexes();
     }
 
@@ -43,14 +41,19 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
             Object value = ( (AlphaIndex) index ).getRightValue();
             field = new ObjectFieldImpl( value );
             ValueType vType = ValueType.determineValueType( value.getClass() );
-            // TODO index ???
+            // TODO LambdaReadAccessor.index ???
             readAccessor = new LambdaReadAccessor( 0, value.getClass(), vType, ( (AlphaIndex) index ).getLeftOperandExtractor() );
         }
     }
 
     @Override
     public Declaration[] getRequiredDeclarations() {
-        return requiredDeclarations;
+        return evaluator.getRequiredDeclarations();
+    }
+
+    @Override
+    public void replaceDeclaration(Declaration oldDecl, Declaration newDecl) {
+        evaluator.replaceDeclaration( oldDecl, newDecl );
     }
 
     @Override
@@ -68,11 +71,6 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
             }
         }
         return mask;
-    }
-
-    @Override
-    public void replaceDeclaration(Declaration oldDecl, Declaration newDecl) {
-        throw new UnsupportedOperationException();
     }
 
     @Override

@@ -21,14 +21,15 @@ import java.util.Collection;
 import org.drools.compiler.kproject.models.KieBaseModelImpl;
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.impl.InternalKnowledgeBase;
+import org.drools.core.impl.KnowledgeBaseFactory;
 import org.drools.model.Model;
 import org.kie.api.KieBaseConfiguration;
-import org.kie.internal.KnowledgeBaseFactory;
-import org.kie.internal.definition.KnowledgePackage;
+import org.kie.api.KieServices;
+import org.kie.api.definition.KiePackage;
 
 public class KieBaseBuilder {
 
-    private final KnowledgePackagesBuilder builder;
+    private final KiePackagesBuilder builder;
     private final String kBaseName;
     private final KieBaseConfiguration conf;
 
@@ -45,14 +46,14 @@ public class KieBaseBuilder {
 
         this.kBaseName = kBaseModel != null ? kBaseModel.getName() : "defaultkiebase";
         this.conf = conf;
-        this.builder = new KnowledgePackagesBuilder(conf);
+        this.builder = new KiePackagesBuilder( conf);
     }
 
     public InternalKnowledgeBase createKieBase() {
-        Collection<KnowledgePackage> pkgs = builder.getKnowledgePackages();
-        InternalKnowledgeBase kBase = (InternalKnowledgeBase) KnowledgeBaseFactory.newKnowledgeBase( kBaseName, conf );
+        Collection<KiePackage> pkgs = builder.getKnowledgePackages();
+        InternalKnowledgeBase kBase = KnowledgeBaseFactory.newKnowledgeBase( kBaseName, conf );
         builder.getPatternClasses().forEach( kBase::getOrCreateExactTypeDeclaration );
-        kBase.addKnowledgePackages( pkgs );
+        kBase.addPackages( pkgs );
         return kBase;
     }
 
@@ -62,7 +63,7 @@ public class KieBaseBuilder {
     }
 
     private static KieBaseConfiguration getKnowledgeBaseConfiguration( KieBaseModelImpl kBaseModel, ClassLoader cl ) {
-        KieBaseConfiguration kbConf = KnowledgeBaseFactory.newKnowledgeBaseConfiguration(null, cl);
+        KieBaseConfiguration kbConf = KieServices.get().newKieBaseConfiguration( null, cl );
         if (kBaseModel != null) {
             kbConf.setOption( kBaseModel.getEqualsBehavior() );
             kbConf.setOption( kBaseModel.getEventProcessingMode() );

@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.base.ClassObjectType;
@@ -28,6 +29,7 @@ import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.GroupElement;
+import org.drools.core.rule.GroupElement.Type;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.model.Condition;
@@ -37,21 +39,23 @@ import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
 import org.drools.model.View;
+import org.drools.model.patterns.AndPatterns;
+import org.drools.model.patterns.OrPatterns;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
 import org.drools.modelcompiler.constraints.LambdaConstraint;
 import org.kie.api.KieBaseConfiguration;
-import org.kie.internal.definition.KnowledgePackage;
+import org.kie.api.definition.KiePackage;
 
-public class KnowledgePackagesBuilder {
+public class KiePackagesBuilder {
 
     private final RuleBaseConfiguration configuration;
 
-    private Map<String, KnowledgePackage> packages = new HashMap<>();
+    private Map<String, KiePackage> packages = new HashMap<>();
 
     private Set<Class<?>> patternClasses = new HashSet<>();
 
-    public KnowledgePackagesBuilder(KieBaseConfiguration conf) {
+    public KiePackagesBuilder( KieBaseConfiguration conf ) {
         this.configuration = ( (RuleBaseConfiguration) conf );
     }
 
@@ -88,13 +92,25 @@ public class KnowledgePackagesBuilder {
 
                 Variable patternVariable = modelPattern.getPatternVariable();
                 Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
-                                               0, // offset is 0 by default
+                                               0, // offset will be set by ReteooBuilder
                                                new ClassObjectType( patternClass ),
                                                ctx.getPatternId( patternVariable ),
                                                true );
                 ctx.registerPattern( patternVariable, pattern );
                 addConstraintsToPattern( ctx, pattern, modelPattern, modelPattern.getConstraint() );
                 return pattern;
+            case OR:
+                GroupElement or = new GroupElement( Type.OR );
+                for (Condition subCondition : ( (OrPatterns) condition ).getSubConditions()) {
+                    or.addChild( conditionToElement( ctx, subCondition ) );
+                }
+                return or;
+            case AND:
+                GroupElement and = new GroupElement( Type.AND );
+                for (Condition subCondition : ( (AndPatterns) condition ).getSubConditions()) {
+                    and.addChild( conditionToElement( ctx, subCondition ) );
+                }
+                return and;
         }
         throw new UnsupportedOperationException();
     }
@@ -102,9 +118,10 @@ public class KnowledgePackagesBuilder {
     private void addConstraintsToPattern( RuleContext ctx, Pattern pattern, org.drools.model.Pattern modelPattern, Constraint constraint ) {
         if (constraint.getType() == Constraint.Type.SINGLE) {
             SingleConstraint singleConstraint = (SingleConstraint) constraint;
-            ConstraintEvaluator constraintEvaluator = new ConstraintEvaluator( modelPattern, singleConstraint );
+            Declaration[] declarations = getRequiredDeclaration(ctx, modelPattern, singleConstraint);
+            ConstraintEvaluator constraintEvaluator = new ConstraintEvaluator( declarations, pattern, singleConstraint );
             if (singleConstraint.getVariables().length > 0) {
-                pattern.addConstraint( new LambdaConstraint( constraintEvaluator, getRequiredDeclaration(ctx, modelPattern, singleConstraint) ) );
+                pattern.addConstraint( new LambdaConstraint( constraintEvaluator ) );
             }
         } else if (modelPattern.getConstraint().getType() == Constraint.Type.AND) {
             for (Constraint child : constraint.getChildren()) {
@@ -114,15 +131,13 @@ public class KnowledgePackagesBuilder {
     }
 
     private Declaration[] getRequiredDeclaration( RuleContext ctx, org.drools.model.Pattern pattern, SingleConstraint singleConstraint ) {
-        for (Variable variable : singleConstraint.getVariables()) {
-            if (pattern.getPatternVariable() != variable) {
-                return new Declaration[] { ctx.getPattern( variable ).getDeclaration() };
-            }
-        }
-        return new Declaration[0];
+        return Stream.of( singleConstraint.getVariables() )
+                     .map( ctx::getPattern )
+                     .map( Pattern::getDeclaration )
+                     .toArray( Declaration[]::new );
     }
 
-    public Collection<KnowledgePackage> getKnowledgePackages() {
+    public Collection<KiePackage> getKnowledgePackages() {
         return packages.values();
     }
 }
