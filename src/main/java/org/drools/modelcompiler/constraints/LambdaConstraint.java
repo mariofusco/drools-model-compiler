@@ -75,7 +75,10 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public LambdaConstraint clone() {
-        return this;
+        LambdaConstraint clone = new LambdaConstraint( evaluator.clone() );
+        clone.field = this.field;
+        clone.readAccessor = this.readAccessor;
+        return clone;
     }
 
     @Override

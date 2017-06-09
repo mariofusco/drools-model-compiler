@@ -18,6 +18,8 @@ package org.drools.modelcompiler.consequence;
 
 import org.drools.core.WorkingMemory;
 import org.drools.core.definitions.rule.impl.RuleImpl;
+import org.drools.core.reteoo.RuleTerminalNode;
+import org.drools.core.rule.Declaration;
 import org.drools.core.spi.Consequence;
 import org.drools.core.spi.KnowledgeHelper;
 import org.drools.model.Drools;
@@ -42,6 +44,8 @@ public class LambdaConsequence implements Consequence {
 
     @Override
     public void evaluate( KnowledgeHelper knowledgeHelper, WorkingMemory workingMemory ) throws Exception {
+        Declaration[] declarations = ((RuleTerminalNode)knowledgeHelper.getMatch().getTuple().getTupleSink()).getRequiredDeclarations();
+
         Variable[] consequenceDeclarations = consequence.getDeclarations();
         Object[] objs = knowledgeHelper.getTuple().toObjects();
 
