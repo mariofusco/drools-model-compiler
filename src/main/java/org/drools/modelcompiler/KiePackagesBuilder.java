@@ -33,6 +33,7 @@ import org.drools.core.rule.GroupElement.Type;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.model.Condition;
+import org.drools.model.Consequence;
 import org.drools.model.Constraint;
 import org.drools.model.Model;
 import org.drools.model.Rule;
@@ -75,8 +76,18 @@ public class KiePackagesBuilder {
         ruleImpl.setPackage( rule.getPackge() );
         RuleContext ctx = new RuleContext();
         populateLHS( ctx, ruleImpl.getLhs(), rule.getView() );
-        ruleImpl.setConsequence( new LambdaConsequence( rule.getConsequence(), ctx ) );
+        processConsequence( rule, ruleImpl, ctx );
         return ruleImpl;
+    }
+
+    private void processConsequence( Rule rule, RuleImpl ruleImpl, RuleContext ctx ) {
+        Consequence consequence = rule.getConsequence();
+        ruleImpl.setConsequence( new LambdaConsequence( consequence, ctx ) );
+        String[] requiredDeclarations = Stream.of( consequence.getDeclarations() )
+                                              .map(ctx::getPattern).map( Pattern::getDeclaration )
+                                              .map( Declaration::getIdentifier )
+                                              .toArray(String[]::new);
+        ruleImpl.setRequiredDeclarationsForConsequence( RuleImpl.DEFAULT_CONSEQUENCE_NAME, requiredDeclarations );
     }
 
     private void populateLHS( RuleContext ctx, GroupElement lhs, View view ) {

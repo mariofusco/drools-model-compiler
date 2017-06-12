@@ -17,11 +17,14 @@
 package org.drools.modelcompiler.consequence;
 
 import org.drools.core.WorkingMemory;
+import org.drools.core.common.InternalFactHandle;
+import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.reteoo.RuleTerminalNode;
 import org.drools.core.rule.Declaration;
 import org.drools.core.spi.Consequence;
 import org.drools.core.spi.KnowledgeHelper;
+import org.drools.core.spi.Tuple;
 import org.drools.model.Drools;
 import org.drools.model.Variable;
 import org.drools.model.functions.FunctionN;
@@ -46,24 +49,16 @@ public class LambdaConsequence implements Consequence {
     public void evaluate( KnowledgeHelper knowledgeHelper, WorkingMemory workingMemory ) throws Exception {
         Declaration[] declarations = ((RuleTerminalNode)knowledgeHelper.getMatch().getTuple().getTupleSink()).getRequiredDeclarations();
 
-        Variable[] consequenceDeclarations = consequence.getDeclarations();
-        Object[] objs = knowledgeHelper.getTuple().toObjects();
-
-        Object[] facts;
-        int i = 0;
-        if ( consequence.isUsingDrools() ) {
-            facts = new Object[consequenceDeclarations.length + 1];
-            facts[0] = new DroolsImpl( knowledgeHelper );
-            i++;
-        } else {
-            facts = new Object[consequenceDeclarations.length];
-        }
-
-        for ( int j = 0; j < consequenceDeclarations.length; i++, j++ ) {
-            facts[i] = context.getBoundFact( consequenceDeclarations[j], objs );
+        Tuple tuple = knowledgeHelper.getTuple();
+        Object[] facts = new Object[declarations.length];
+        for (int i = 0; i < declarations.length; i++) {
+            InternalFactHandle fh = tuple.get( declarations[i] );
+            facts[i] = declarations[i].getValue( (InternalWorkingMemory) workingMemory, fh.getObject() );
         }
 
         consequence.getBlock().execute( facts );
+
+        Object[] objs = knowledgeHelper.getTuple().toObjects();
 
         for ( org.drools.model.Consequence.Update update : consequence.getUpdates() ) {
             Object updatedFact = context.getBoundFact( update.getUpdatedVariable(), objs );
