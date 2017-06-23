@@ -17,6 +17,7 @@
 package org.drools.modelcompiler;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Collection;
 
 import org.drools.compiler.kie.builder.impl.KieProject;
@@ -24,20 +25,21 @@ import org.drools.compiler.kie.builder.impl.ResultsImpl;
 import org.drools.compiler.kie.builder.impl.ZipKieModule;
 import org.drools.compiler.kproject.models.KieBaseModelImpl;
 import org.drools.core.impl.InternalKnowledgeBase;
+import org.drools.core.util.IoUtils;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.builder.ReleaseId;
 import org.kie.api.builder.model.KieModuleModel;
 
-import static java.util.Arrays.asList;
-
 public class CanonicalKieModule extends ZipKieModule {
 
-    private static final String DEFAULT_MODEL_SOURCE = "mymodel.Rules";
+    public static final String PACKAGE_LIST = "META-INF/packages";
+    public static final String RULES_FILE_NAME = "Rules";
+    public static final String VARIABLES_FILE_NAME = "Variables";
 
     private final Collection<String> ruleClassesNames;
 
     public CanonicalKieModule( ReleaseId releaseId, KieModuleModel kieProject, File file ) {
-        this( releaseId, kieProject, file, asList(DEFAULT_MODEL_SOURCE) );
+        this( releaseId, kieProject, file, null );
     }
 
     public CanonicalKieModule( ReleaseId releaseId, KieModuleModel kieProject, File file, Collection<String> ruleClassesNames ) {
@@ -50,7 +52,20 @@ public class CanonicalKieModule extends ZipKieModule {
         KieProjectClassLoader kieProjectCL = new KieProjectClassLoader(kieProject);
 
         KieBaseBuilder builder = new KieBaseBuilder( kBaseModel, kieProject.getClassLoader(), conf );
-        ruleClassesNames.forEach( s -> builder.addModel( kieProjectCL.createInstance( s ) ) );
+
+        if (ruleClassesNames == null) {
+            String packages = null;
+            try {
+                packages = new String( IoUtils.readBytesFromInputStream( kieProjectCL.getResourceAsStream( PACKAGE_LIST ) ) );
+            } catch (IOException e) {
+                throw new RuntimeException( e );
+            }
+            for ( String pkg : packages.split( "\n" ) ) {
+                builder.addModel( kieProjectCL.createInstance( pkg + "." + RULES_FILE_NAME ) );
+            }
+        } else {
+            ruleClassesNames.forEach( s -> builder.addModel( kieProjectCL.createInstance( s ) ) );
+        }
 
         return builder.createKieBase();
     }

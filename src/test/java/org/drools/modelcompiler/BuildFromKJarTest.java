@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.util.List;
 
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
+import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
+import org.drools.modelcompiler.builder.CanonicalModelKieProject;
 import org.junit.Test;
 import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
@@ -79,15 +81,16 @@ public class BuildFromKJarTest {
         Resource javaResource = ks.getResources().newFileSystemResource( "src/test/java/" + javaSrc );
         kfs.write( "src/main/java/" + javaSrc, javaResource );
 
-//        kfs.write("src/main/resources/rule.drl", getRule());
-        kfs.write("src/main/java/mymodel/Variables.java", getVariableSource());
-        kfs.write("src/main/java/mymodel/Rules.java", getRuleModelSource());
+        kfs.write("src/main/resources/rule.drl", getRule());
 
         KieBuilder kieBuilder = ks.newKieBuilder( kfs );
-        List<Message> messages = kieBuilder.buildAll().getResults().getMessages();
+        List<Message> messages = ( (KieBuilderImpl) kieBuilder ).buildAll( CanonicalModelKieProject::new )
+                                                                .getResults().getMessages();
         if (!messages.isEmpty()) {
             fail(messages.toString());
         }
+
+        //generateModel(kieBuilder);
 
         InternalKieModule kieModule = (InternalKieModule) kieBuilder.getKieModule();
         return bytesToFile( releaseId, kieModule.getBytes(), ".jar" );
@@ -116,7 +119,8 @@ public class BuildFromKJarTest {
     }
 
     private String getRule() {
-        return "import " + Person.class.getCanonicalName() + ";\n" +
+        return "package myrules;\n" +
+               "import " + Person.class.getCanonicalName() + ";\n" +
                "rule beta when\n" +
                "  $p1 : Person(name == \"Mark\")\n" +
                "  $p2 : Person(name != \"Mark\", age > $p1.age)\n" +
@@ -138,55 +142,4 @@ public class BuildFromKJarTest {
         return file;
     }
 
-    private String getVariableSource() {
-        return "package mymodel;\n" +
-               "" +
-               "import org.drools.model.*;\n" +
-               "import static org.drools.model.DSL.*;\n" +
-               "import " + Person.class.getCanonicalName() + ";\n" +
-               "" +
-               "public class Variables {\n" +
-               "" +
-               "    public static final Variable<Person> markV = variableOf( type( Person.class ) );\n" +
-               "    public static final Variable<Person> olderV = variableOf( type( Person.class ) );\n" +
-               "}\n";
-    }
-
-    private String getRuleModelSource() {
-        return "package mymodel;\n" +
-               "" +
-               "import java.util.*;\n" +
-               "import org.drools.model.*;\n" +
-               "import static org.drools.model.DSL.*;\n" +
-               "import " + Person.class.getCanonicalName() + ";\n" +
-               "import org.drools.model.Index.ConstraintType;\n" +
-               "" +
-               "import static mymodel.Variables.*;\n" +
-               "" +
-               "public class Rules implements Model {\n" +
-               "" +
-               "    int a;\n" + // workaround for ecj bug!
-               "" +
-               "    @Override\n" +
-               "    public List<Rule> getRules() {\n" +
-               "        return Arrays.asList( rule1() );\n" +
-               "    }\n" +
-               "" +
-               "    private Rule rule1() {\n" +
-               "        Rule rule = rule( \"beta\" )\n" +
-               "                .view(\n" +
-               "                        expr(markV, p -> p.getName().equals(\"Mark\"))\n" +
-               "                                .indexedBy( ConstraintType.EQUAL, Person::getName, \"Mark\" )\n" +
-               "                                .reactOn( \"name\", \"age\" ),\n" +
-               "                        expr(olderV, p -> !p.getName().equals(\"Mark\"))\n" +
-               "                                .reactOn( \"name\" ),\n" +
-               "                        expr(olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())\n" +
-               "                                .reactOn( \"age\" )\n" +
-               "                     )\n" +
-               "                .then(c -> c.on(olderV, markV)\n" +
-               "                            .execute( (p1, p2) -> System.out.println( p1.getName() + \" is older than \" + p2.getName() ) ) );\n" +
-               "        return rule;\n" +
-               "    }\n" +
-               "}\n";
-    }
 }
