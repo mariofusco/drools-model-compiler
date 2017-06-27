@@ -26,6 +26,7 @@ import org.drools.compiler.kie.builder.impl.ZipKieModule;
 import org.drools.compiler.kproject.models.KieBaseModelImpl;
 import org.drools.core.impl.InternalKnowledgeBase;
 import org.drools.core.util.IoUtils;
+import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.builder.ReleaseId;
 import org.kie.api.builder.model.KieModuleModel;

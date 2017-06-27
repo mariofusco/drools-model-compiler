@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.drools.modelcompiler;
+package org.drools.modelcompiler.builder;
 
 import java.util.Collection;
 
@@ -23,6 +23,7 @@ import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.impl.InternalKnowledgeBase;
 import org.drools.core.impl.KnowledgeBaseFactory;
 import org.drools.model.Model;
+import org.drools.modelcompiler.KiePackagesBuilder;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.KieServices;
 import org.kie.api.definition.KiePackage;

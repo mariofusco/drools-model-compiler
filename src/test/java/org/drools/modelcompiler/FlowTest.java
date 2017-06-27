@@ -23,6 +23,7 @@ import org.drools.core.impl.InternalKnowledgeBase;
 import org.drools.model.Index.ConstraintType;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
+import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.junit.Test;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.FactHandle;

@@ -16,8 +16,6 @@
 
 package org.drools.modelcompiler.builder;
 
-import org.drools.modelcompiler.Person;
-
 public class PackageModel {
 
     private final String name;
@@ -46,7 +44,7 @@ public class PackageModel {
                "" +
                "import org.drools.model.*;\n" +
                "import static org.drools.model.DSL.*;\n" +
-               "import " + Person.class.getCanonicalName() + ";\n" +
+               "import org.drools.modelcompiler.Person;\n" +
                "" +
                "public class Variables {\n" +
                "" +
@@ -61,7 +59,7 @@ public class PackageModel {
                "import java.util.*;\n" +
                "import org.drools.model.*;\n" +
                "import static org.drools.model.DSL.*;\n" +
-               "import " + Person.class.getCanonicalName() + ";\n" +
+               "import org.drools.modelcompiler.Person;\n" +
                "import org.drools.model.Index.ConstraintType;\n" +
                "" +
                "import static myrules.Variables.*;\n" +

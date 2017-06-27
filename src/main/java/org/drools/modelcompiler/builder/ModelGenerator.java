@@ -72,7 +72,6 @@ public class ModelGenerator {
             context.declarations.put( pattern.getDeclaration().getBindingName(), patternType );
         }
         for (Constraint constraint : pattern.getConstraints()) {
-            MvelConstraint mvelConstraint = ( (MvelConstraint) constraint );
 
             ParserContext parserContext = new ParserContext();
             parserContext.setStrictTypeEnforcement(true);
@@ -80,6 +79,8 @@ public class ModelGenerator {
             parserContext.addInput("this", patternType);
 
             Map<String, Object> variables = new HashMap<>();
+
+            MvelConstraint mvelConstraint = ( (MvelConstraint) constraint );
             for (Declaration decl : mvelConstraint.getRequiredDeclarations()) {
                 parserContext.addInput(decl.getBindingName(), decl.getDeclarationClass());
                 try {
