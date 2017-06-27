@@ -16,11 +16,9 @@
 
 package org.drools.modelcompiler.builder;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.drools.compiler.kie.builder.impl.MemoryKieModule;
 import org.drools.core.base.ClassObjectType;
 import org.drools.core.base.EvaluatorWrapper;
 import org.drools.core.definitions.rule.impl.RuleImpl;
@@ -32,7 +30,6 @@ import org.drools.core.rule.constraint.ConditionAnalyzer;
 import org.drools.core.rule.constraint.ConditionAnalyzer.SingleCondition;
 import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.Constraint;
-import org.kie.api.builder.KieBuilder;
 import org.kie.api.definition.KiePackage;
 import org.mvel2.MVEL;
 import org.mvel2.ParserContext;
@@ -41,14 +38,7 @@ import org.mvel2.integration.impl.MapVariableResolverFactory;
 
 public class ModelGenerator {
 
-    public static void generateModel( KieBuilder kieBuilder ) {
-        Collection<KiePackage> pkgs = ( (MemoryKieModule) kieBuilder.getKieModule() ).getKnowledgePackagesForKieBase( "kbase" );
-        for ( KiePackage pkg : pkgs ) {
-            visit( pkg );
-        }
-    }
-
-    public static PackageModel visit( KiePackage pkg ) {
+    public static PackageModel generateModel( KiePackage pkg ) {
         PackageModel packageModel = new PackageModel( pkg.getName() );
         for ( org.kie.api.definition.rule.Rule rule : pkg.getRules() ) {
             RuleContext context = new RuleContext();

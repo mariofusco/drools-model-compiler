@@ -23,7 +23,7 @@ import org.drools.compiler.builder.impl.KnowledgeBuilderImpl;
 import org.drools.compiler.compiler.PackageRegistry;
 import org.drools.compiler.lang.descr.PackageDescr;
 
-import static org.drools.modelcompiler.builder.ModelGenerator.visit;
+import static org.drools.modelcompiler.builder.ModelGenerator.generateModel;
 
 public class ModelBuilderImpl extends KnowledgeBuilderImpl {
 
@@ -32,7 +32,7 @@ public class ModelBuilderImpl extends KnowledgeBuilderImpl {
     @Override
     protected void compileAllRules( PackageDescr packageDescr, PackageRegistry pkgRegistry ) {
         compileKnowledgePackages( packageDescr, pkgRegistry );
-        packageModels.add( visit(pkgRegistry.getPackage()) );
+        packageModels.add( generateModel( pkgRegistry.getPackage() ) );
     }
 
     public List<PackageModel> getPackageModels() {

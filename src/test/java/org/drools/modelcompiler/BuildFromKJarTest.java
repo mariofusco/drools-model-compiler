@@ -90,8 +90,6 @@ public class BuildFromKJarTest {
             fail(messages.toString());
         }
 
-        //generateModel(kieBuilder);
-
         InternalKieModule kieModule = (InternalKieModule) kieBuilder.getKieModule();
         return bytesToFile( releaseId, kieModule.getBytes(), ".jar" );
     }

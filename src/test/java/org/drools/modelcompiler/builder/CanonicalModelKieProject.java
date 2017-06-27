@@ -75,11 +75,13 @@ public class CanonicalModelKieProject extends KieModuleKieProject {
             String folderName = pkgName.replace( '.', '/' );
 
             String varsSourceName = "src/main/java/" + folderName + "/" + VARIABLES_FILE_NAME + ".java";
-            srcMfs.write(varsSourceName, pkgModel.getVarsSource().getBytes());
+            byte[] varsBytes = pkgModel.getVarsSource().getBytes();
+            srcMfs.write(varsSourceName, varsBytes);
             sources.add(varsSourceName);
 
             String rulesSourceName = "src/main/java/" + folderName + "/" + RULES_FILE_NAME + ".java";
-            srcMfs.write(rulesSourceName, pkgModel.getRulesSource().getBytes());
+            byte[] rulesBytes = pkgModel.getRulesSource().getBytes();
+            srcMfs.write(rulesSourceName, rulesBytes);
             sources.add(rulesSourceName);
         }
 
