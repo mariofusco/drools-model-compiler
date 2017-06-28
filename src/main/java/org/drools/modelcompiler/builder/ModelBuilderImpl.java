@@ -18,6 +18,7 @@ package org.drools.modelcompiler.builder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.drools.compiler.builder.impl.KnowledgeBuilderImpl;
 import org.drools.compiler.compiler.PackageRegistry;
@@ -32,7 +33,10 @@ public class ModelBuilderImpl extends KnowledgeBuilderImpl {
     @Override
     protected void compileAllRules( PackageDescr packageDescr, PackageRegistry pkgRegistry ) {
         compileKnowledgePackages( packageDescr, pkgRegistry );
-        packageModels.add( generateModel( pkgRegistry.getPackage() ) );
+        List<RuleDescrImpl> collect = packageDescr.getRules().stream()
+            .map(descr -> new RuleDescrImpl(descr, pkgRegistry.getPackage().getRule(descr.getName())))
+            .collect(Collectors.toList());
+        packageModels.add( generateModel( pkgRegistry.getPackage().getName(), collect ) );
     }
 
     public List<PackageModel> getPackageModels() {

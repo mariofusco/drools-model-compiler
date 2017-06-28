@@ -16,35 +16,75 @@
 
 package org.drools.modelcompiler.builder;
 
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import org.drools.compiler.compiler.DrlExprParser;
+import org.drools.compiler.lang.descr.AtomicExprDescr;
+import org.drools.compiler.lang.descr.BaseDescr;
+import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
+import org.drools.compiler.lang.descr.RelationalExprDescr;
 import org.drools.core.base.ClassObjectType;
-import org.drools.core.base.EvaluatorWrapper;
 import org.drools.core.definitions.rule.impl.RuleImpl;
-import org.drools.core.rule.Declaration;
 import org.drools.core.rule.GroupElement;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.RuleConditionElement;
-import org.drools.core.rule.constraint.ConditionAnalyzer;
-import org.drools.core.rule.constraint.ConditionAnalyzer.SingleCondition;
 import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.Constraint;
-import org.kie.api.definition.KiePackage;
-import org.mvel2.MVEL;
-import org.mvel2.ParserContext;
-import org.mvel2.compiler.ExecutableStatement;
-import org.mvel2.integration.impl.MapVariableResolverFactory;
+import org.drools.core.util.ClassUtils;
+import org.kie.internal.builder.conf.LanguageLevelOption;
 
 public class ModelGenerator {
 
-    public static PackageModel generateModel( KiePackage pkg ) {
-        PackageModel packageModel = new PackageModel( pkg.getName() );
-        for ( org.kie.api.definition.rule.Rule rule : pkg.getRules() ) {
+    public static PackageModel generateModel( String name, List<RuleDescrImpl> rules ) {
+        PackageModel packageModel = new PackageModel( name );
+        for ( RuleDescrImpl r : rules ) {
+            RuleImpl rule = r.getImpl();
             RuleContext context = new RuleContext();
             GroupElement lhs = ( (RuleImpl) rule ).getLhs();
             visit(context, lhs);
+            
+            StringBuilder source = new StringBuilder();
+            
+            source.append("private Rule rule_" + rule.getId() + "() {\n");
+            
+            context.declarations.entrySet().stream()
+                .map(kv -> "  final Variable<"+kv.getValue().getCanonicalName()+"> var_"+kv.getKey()+" = variableOf( type( "+kv.getValue().getCanonicalName()+".class ) );\n")
+                .forEach(source::append);
+            
+            source.append(   "  Rule rule = rule( \"" + rule.getName() + "\" )\n" +
+               "  .view(\n\n");
+            
+            source.append( context.expressions.stream().collect(Collectors.joining(",\n")) );
+            
+            source.append("\n\n  )\n");
+            source.append("  .then(c -> c.on(");
+            source.append( context.declarations.keySet().stream().map(x->"var_"+x).collect(Collectors.joining(", ")) );
+            source.append(")\n");
+            
+            source.append("              .execute( (");
+            source.append( context.declarations.keySet().stream().collect(Collectors.joining(", ")) );
+            source.append(") -> {\n\n");
+
+            source.append( r.getDescr().getConsequence().toString().trim() );
+            
+            source.append("\n\n})\n");
+            
+            source.append("  );\n");
+            
+            source.append("  return rule;\n}\n");
+            
+            packageModel.putRuleMethod("rule_" + rule.getId(), source.toString());
+            
         }
+        packageModel.print();
         return packageModel;
     }
 
@@ -54,7 +94,7 @@ public class ModelGenerator {
                 element.getChildren().forEach( elem -> visit(context, elem) );
                 break;
             default:
-                throw new UnsupportedOperationException();
+                throw new UnsupportedOperationException("TODO"); // TODO
         }
     }
 
@@ -62,54 +102,86 @@ public class ModelGenerator {
         if (conditionElement instanceof Pattern) {
             visit( context, (Pattern) conditionElement );
         } else {
-            throw new UnsupportedOperationException();
+            throw new UnsupportedOperationException("TODO"); // TODO
         }
     }
 
     private static void visit(RuleContext context, Pattern pattern) {
+        System.out.println(pattern);
         Class<?> patternType = ( (ClassObjectType) pattern.getObjectType() ).getClassType();
         if (pattern.getDeclaration() != null) {
             context.declarations.put( pattern.getDeclaration().getBindingName(), patternType );
         }
         for (Constraint constraint : pattern.getConstraints()) {
-
-            ParserContext parserContext = new ParserContext();
-            parserContext.setStrictTypeEnforcement(true);
-            parserContext.setStrongTyping(true);
-            parserContext.addInput("this", patternType);
-
-            Map<String, Object> variables = new HashMap<>();
-
-            MvelConstraint mvelConstraint = ( (MvelConstraint) constraint );
-            for (Declaration decl : mvelConstraint.getRequiredDeclarations()) {
-                parserContext.addInput(decl.getBindingName(), decl.getDeclarationClass());
-                try {
-                    variables.put(decl.getBindingName(), decl.getDeclarationClass().newInstance());
-                } catch (Exception e) {
-                    throw new RuntimeException( e );
+            DrlExprParser drlExprParser = new DrlExprParser( LanguageLevelOption.DRL6_STRICT );
+            ConstraintConnectiveDescr result = drlExprParser.parse( ((MvelConstraint)constraint).getExpression() );
+            if ( result.getDescrs().size() == 1 ) {
+                BaseDescr singletonDescr = result.getDescrs().get(0);
+                System.out.println(singletonDescr);
+                if ( singletonDescr instanceof RelationalExprDescr ) {
+                    RelationalExprDescr relationalExprDescr = (RelationalExprDescr) singletonDescr;
+                    // to be visited
+                    // TODO what if not atomicExprDescr ?
+                    Set<String> usedDeclarations = new HashSet<>();
+                    String left = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations);
+                    String right = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations);
+                    String combo = null;
+                    switch( relationalExprDescr.getOperator() ) {
+                        case "==":
+                            combo = new StringBuilder().append(left).append(".equals(").append(right).append(")").toString();
+                            break;
+                        default:
+                            combo = new StringBuilder().append(left).append(" ").append(relationalExprDescr.getOperator()).append(" ").append(right).toString();
+                    }
+                    
+                    String newExpression = new StringBuilder()
+                            .append("expr( ")
+                            .append( Stream.concat(Stream.of(pattern.getDeclaration().getBindingName()), usedDeclarations.stream()).map(x->"var_"+x).collect(Collectors.joining(", ")) )
+                            .append(", ")
+                            .append("( ")
+                            .append( Stream.concat(Stream.of("_this"), usedDeclarations.stream()).collect(Collectors.joining(", ")) )
+                            .append( " ) -> " )
+                            .append(combo)
+                            .append(" )")
+                            .toString();
+                    System.out.println("Adding newExpression: "+newExpression);
+                    context.expressions.add( newExpression );
                 }
+            } else {
+                throw new UnsupportedOperationException("TODO"); // TODO
             }
-
-            ExecutableStatement statement = (ExecutableStatement)MVEL.compileExpression( mvelConstraint.getExpression(), parserContext );
-            try {
-                statement.getValue( patternType.newInstance(), new MapVariableResolverFactory( variables ) );
-            } catch (Exception e) {
-                throw new RuntimeException( e );
-            }
-            ConditionAnalyzer.Condition condition = new ConditionAnalyzer( statement, mvelConstraint.getRequiredDeclarations(), new EvaluatorWrapper[0], patternType.getCanonicalName()).analyzeCondition();
-            System.out.println(condition);
-            context.expressions.put( pattern.getDeclaration().getBindingName(), conditionToLambda(condition) );
         }
     }
 
-    private static String conditionToLambda(ConditionAnalyzer.Condition condition) {
-        SingleCondition singleCondition = ( (SingleCondition) condition );
-        singleCondition.getLeft();
-        return "_1 -> _1.getName().equals(\"Mark\")";
+    private static String atomicToPart(RuleContext context, Pattern pattern, AtomicExprDescr atomicExprDescr, Set<String> usedDeclarations) {
+        if ( atomicExprDescr.isLiteral() ) {
+            return atomicExprDescr.getExpression();
+        } else {
+            String expression = atomicExprDescr.getExpression();
+            String[] parts = expression.split("\\.");
+            StringBuilder telescoping = new StringBuilder();
+            boolean implicitThis = true;
+            for ( int idx = 0; idx < parts.length ; idx++ ) {
+                String part = parts[idx];
+                boolean isGlobal = false;
+                if ( isGlobal ) {
+                    implicitThis = false;
+                    telescoping.append( part );
+                } else if ( idx == 0 && context.declarations.containsKey(part) ) {
+                    implicitThis = false;
+                    usedDeclarations.add( part );
+                    telescoping.append( part );
+                } else {
+                    Method accessor = ClassUtils.getAccessor(( (ClassObjectType) pattern.getObjectType() ).getClassType(), part);
+                    telescoping.append( "." + accessor.getName() + "()" );
+                }
+            }
+            return implicitThis ? "_this" + telescoping.toString() : telescoping.toString(); 
+        }
     }
 
     public static class RuleContext {
         Map<String, Class<?>> declarations = new HashMap<>();
-        Map<String, String> expressions = new HashMap<>();
+        List<String> expressions = new ArrayList<>();
     }
 }
