@@ -16,12 +16,15 @@
 
 package org.drools.modelcompiler.builder;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 public class PackageModel {
 
     private final String name;
 
-    private String varsSource;
-    private String rulesSource;
+    private Map<String, String> ruleMethods = new HashMap<>();
 
     public PackageModel( String name ) {
         this.name = name;
@@ -30,15 +33,54 @@ public class PackageModel {
     public String getName() {
         return name;
     }
+    
+    public void putRuleMethod(String methodName, String methodSource) {
+        this.ruleMethods.put(methodName, methodSource);
+    }
 
     public String getVarsSource() {
-        return getVariableSource();
+        return null;
     }
 
     public String getRulesSource() {
-        return getRuleModelSource();
+        StringBuilder source = new StringBuilder();
+        source.append(
+                "package "+name+";\n" +
+                "\n" +
+                "import java.util.*;\n" +
+                "import org.drools.model.*;\n" +
+                "import static org.drools.model.DSL.*;\n" +
+                "import org.drools.modelcompiler.Person;\n" +
+                "import org.drools.model.Index.ConstraintType;\n" +
+                "\n" +
+                "public class Rules implements Model {\n" +
+                "\n" +
+                "    @Override\n" +
+                "    public List<Rule> getRules() {\n" +
+                "        return rules;\n" +
+                "    }\n" +
+                "\n" +
+                "    List<Rule> rules = new ArrayList<>();\n" + 
+                "    {\n"+
+                "      ");
+        
+        source.append(ruleMethods.keySet().stream().map(mn -> "rules.add( " + mn + "() );").collect(Collectors.joining(", ")));
+        source.append("\n    }\n");
+        
+        ruleMethods.values().forEach(source::append);
+        
+        source.append("\n}\n");
+        
+        return source.toString();
     }
 
+    public void print() {
+        System.out.println("=====");
+        System.out.println("PackageModel "+name);
+        System.out.println(getRulesSource());
+        System.out.println("=====");
+    }
+    
     private static String getVariableSource() {
         return "package myrules;\n" +
                "" +
@@ -90,4 +132,5 @@ public class PackageModel {
                "    }\n" +
                "}\n";
     }
+
 }
