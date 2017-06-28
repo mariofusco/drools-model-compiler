@@ -19,12 +19,12 @@ package org.drools.modelcompiler;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.drools.core.impl.InternalKnowledgeBase;
 import org.drools.model.Index.ConstraintType;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.junit.Test;
+import org.kie.api.KieBase;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.FactHandle;
 
@@ -56,7 +56,7 @@ public class FlowTest {
                 .then(c -> c.on(olderV, markV)
                             .execute((p1, p2) -> result.value = p1.getName() + " is older than " + p2.getName()));
 
-        InternalKnowledgeBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -101,7 +101,7 @@ public class FlowTest {
                 .then(c -> c.on(nameV)
                             .execute(s -> result.value = s));
 
-        InternalKnowledgeBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -137,7 +137,7 @@ public class FlowTest {
                 .then(c -> c.on(nameV)
                             .execute(s -> result.value = s));
 
-        InternalKnowledgeBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -148,6 +148,33 @@ public class FlowTest {
         ksession.fireAllRules();
 
         assertEquals("Mario", result.value);
+    }
+
+    @Test
+    public void testNot() {
+        Result result = new Result();
+
+        List<String> list = new ArrayList<>();
+        Variable<Person> oldestV = variableOf( type( Person.class ) );
+        Variable<Person> otherV = variableOf( type( Person.class ) );
+
+        Rule rule = rule("not")
+                .view(
+                        not(otherV, oldestV, (p1, p2) -> p1.getAge() > p2.getAge())
+                     )
+                .then(c -> c.on(oldestV)
+                            .execute(p -> result.value = "Oldest person is " + p.getName()));
+
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Edson", 35));
+        ksession.insert(new Person("Mario", 40));
+
+        ksession.fireAllRules();
+        assertEquals("Oldest person is Mario", result.value);
     }
 
     private static class Result {

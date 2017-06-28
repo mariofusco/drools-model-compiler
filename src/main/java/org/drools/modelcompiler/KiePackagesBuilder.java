@@ -29,7 +29,6 @@ import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.GroupElement;
-import org.drools.core.rule.GroupElement.Type;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.model.Condition;
@@ -40,13 +39,13 @@ import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
 import org.drools.model.View;
-import org.drools.model.patterns.AndPatterns;
-import org.drools.model.patterns.OrPatterns;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
 import org.drools.modelcompiler.constraints.LambdaConstraint;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.definition.KiePackage;
+
+import static org.drools.modelcompiler.ModelCompilerUtil.conditionToGroupElementType;
 
 public class KiePackagesBuilder {
 
@@ -95,6 +94,14 @@ public class KiePackagesBuilder {
     }
 
     private RuleConditionElement conditionToElement( RuleContext ctx, Condition condition ) {
+        if (condition.getType().isComposite()) {
+            GroupElement ge = new GroupElement( conditionToGroupElementType( condition.getType() ) );
+            for (Condition subCondition : condition.getSubConditions()) {
+                ge.addChild( conditionToElement( ctx, subCondition ) );
+            }
+            return ge;
+        }
+
         switch (condition.getType()) {
             case PATTERN:
                 org.drools.model.Pattern modelPattern = (org.drools.model.Pattern) condition;
@@ -110,18 +117,6 @@ public class KiePackagesBuilder {
                 ctx.registerPattern( patternVariable, pattern );
                 addConstraintsToPattern( ctx, pattern, modelPattern, modelPattern.getConstraint() );
                 return pattern;
-            case OR:
-                GroupElement or = new GroupElement( Type.OR );
-                for (Condition subCondition : ( (OrPatterns) condition ).getSubConditions()) {
-                    or.addChild( conditionToElement( ctx, subCondition ) );
-                }
-                return or;
-            case AND:
-                GroupElement and = new GroupElement( Type.AND );
-                for (Condition subCondition : ( (AndPatterns) condition ).getSubConditions()) {
-                    and.addChild( conditionToElement( ctx, subCondition ) );
-                }
-                return and;
         }
         throw new UnsupportedOperationException();
     }
