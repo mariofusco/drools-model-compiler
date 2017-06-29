@@ -16,9 +16,6 @@
 
 package org.drools.modelcompiler;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.drools.model.Index.ConstraintType;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
@@ -30,16 +27,20 @@ import org.kie.api.runtime.rule.FactHandle;
 
 import static java.util.Arrays.asList;
 import static org.drools.model.DSL.*;
+import static org.drools.model.functions.accumulate.Average.avg;
+import static org.drools.model.functions.accumulate.Sum.sum;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class FlowTest {
 
+    private static class Result {
+        Object value;
+    }
+
     @Test
     public void testBeta() {
         Result result = new Result();
-
-        List<String> list = new ArrayList<>();
         Variable<Person> markV = variableOf( type( Person.class ) );
         Variable<Person> olderV = variableOf( type( Person.class ) );
 
@@ -53,7 +54,7 @@ public class FlowTest {
                         expr("exprC", olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())
                                 .reactOn( "age" )
                      )
-                .then(c -> c.on(olderV, markV)
+                .then(on(olderV, markV)
                             .execute((p1, p2) -> result.value = p1.getName() + " is older than " + p2.getName()));
 
         KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
@@ -86,8 +87,6 @@ public class FlowTest {
     @Test
     public void test3Patterns() {
         Result result = new Result();
-
-        List<String> list = new ArrayList<>();
         Variable<Person> personV = variableOf( type( Person.class ) );
         Variable<Person> markV = variableOf( type( Person.class ) );
         Variable<String> nameV = variableOf( type( String.class ) );
@@ -98,7 +97,7 @@ public class FlowTest {
                         expr("exprB", personV, markV, (p1, p2) -> p1.getAge() > p2.getAge()),
                         expr("exprC", nameV, personV, (s, p) -> s.equals( p.getName() ))
                      )
-                .then(c -> c.on(nameV)
+                .then(on(nameV)
                             .execute(s -> result.value = s));
 
         KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
@@ -117,8 +116,6 @@ public class FlowTest {
     @Test
     public void testOr() {
         Result result = new Result();
-
-        List<String> list = new ArrayList<>();
         Variable<Person> personV = variableOf( type( Person.class ) );
         Variable<Person> markV = variableOf( type( Person.class ) );
         Variable<String> nameV = variableOf( type( String.class ) );
@@ -134,7 +131,7 @@ public class FlowTest {
                           ),
                         expr("exprC", nameV, personV, (s, p) -> s.equals( p.getName() ))
                      )
-                .then(c -> c.on(nameV)
+                .then(on(nameV)
                             .execute(s -> result.value = s));
 
         KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
@@ -153,8 +150,6 @@ public class FlowTest {
     @Test
     public void testNot() {
         Result result = new Result();
-
-        List<String> list = new ArrayList<>();
         Variable<Person> oldestV = variableOf( type( Person.class ) );
         Variable<Person> otherV = variableOf( type( Person.class ) );
 
@@ -162,7 +157,7 @@ public class FlowTest {
                 .view(
                         not(otherV, oldestV, (p1, p2) -> p1.getAge() > p2.getAge())
                      )
-                .then(c -> c.on(oldestV)
+                .then(on(oldestV)
                             .execute(p -> result.value = "Oldest person is " + p.getName()));
 
         KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
@@ -177,7 +172,58 @@ public class FlowTest {
         assertEquals("Oldest person is Mario", result.value);
     }
 
-    private static class Result {
-        Object value;
+    @Test
+    public void testAccumulate1() {
+        Result result = new Result();
+        Variable<Person> person = variableOf( type( Person.class ) );
+        Variable<Integer> resultSum = variableOf( type( Integer.class ) );
+
+        Rule rule = rule("accumulate")
+                .view(
+                        accumulate(expr(person, p -> p.getName().startsWith("M")),
+                                   sum(Person::getAge).as(resultSum))
+                     )
+                .then( on(resultSum).execute(sum -> result.value = "total = " + sum) );
+
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Edson", 35));
+        ksession.insert(new Person("Mario", 40));
+
+        ksession.fireAllRules();
+        assertEquals("total = 77", result.value);
+    }
+
+    @Test
+    public void testAccumulate2() {
+        Result result = new Result();
+        Variable<Person> person = variableOf( type( Person.class ) );
+        Variable<Integer> resultSum = variableOf( type( Integer.class ) );
+        Variable<Double> resultAvg = variableOf( type( Double.class ) );
+
+        Rule rule = rule("accumulate")
+                .view(
+                        accumulate(expr(person, p -> p.getName().startsWith("M")),
+                                   sum(Person::getAge).as(resultSum),
+                                   avg(Person::getAge).as(resultAvg))
+                     )
+                .then(
+                        on(resultSum, resultAvg)
+                                .execute((sum, avg) -> result.value = "total = " + sum + "; average = " + avg)
+                     );
+
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Edson", 35));
+        ksession.insert(new Person("Mario", 40));
+
+        ksession.fireAllRules();
+        assertEquals("total = 77; average = 38.5", result.value);
     }
 }

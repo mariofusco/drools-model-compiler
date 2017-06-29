@@ -27,13 +27,14 @@ public class RuleContext {
     private final Map<Variable, Pattern> patterns = new HashMap<>();
 
     private int patternIndex = -1;
+    private int variableIndex = -1;
 
     public int getNextPatternIndex() {
-        return ++this.patternIndex;
+        return ++patternIndex;
     }
 
     public String getPatternId( Variable patternVariable ) {
-        return patternIds.computeIfAbsent( patternVariable, v -> "$" + patternIndex );
+        return patternIds.computeIfAbsent( patternVariable, v -> "$" + ++variableIndex );
     }
 
     public void registerPattern( Variable variable, Pattern pattern ) {

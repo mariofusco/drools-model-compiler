@@ -25,12 +25,21 @@ import java.util.stream.Stream;
 
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.base.ClassObjectType;
+import org.drools.core.base.extractors.ArrayElementReader;
+import org.drools.core.base.extractors.SelfReferenceClassFieldReader;
 import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
+import org.drools.core.rule.Accumulate;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.GroupElement;
+import org.drools.core.rule.MultiAccumulate;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.RuleConditionElement;
+import org.drools.core.rule.SingleAccumulate;
+import org.drools.core.spi.Accumulator;
+import org.drools.core.spi.InternalReadAccessor;
+import org.drools.model.AccumulateFunction;
+import org.drools.model.AccumulatePattern;
 import org.drools.model.Condition;
 import org.drools.model.Consequence;
 import org.drools.model.Constraint;
@@ -41,10 +50,12 @@ import org.drools.model.Variable;
 import org.drools.model.View;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
+import org.drools.modelcompiler.constraints.LambdaAccumulator;
 import org.drools.modelcompiler.constraints.LambdaConstraint;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.definition.KiePackage;
 
+import static org.drools.core.rule.Pattern.getReadAcessor;
 import static org.drools.modelcompiler.ModelCompilerUtil.conditionToGroupElementType;
 
 public class KiePackagesBuilder {
@@ -61,7 +72,7 @@ public class KiePackagesBuilder {
 
     public void addModel( Model model ) {
         for (Rule rule : model.getRules()) {
-            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( rule.getPackge(), name -> new KnowledgePackageImpl(name) );
+            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( rule.getPackge(), KnowledgePackageImpl::new );
             pkg.addRule( compileRule( rule ) );
         }
     }
@@ -82,10 +93,13 @@ public class KiePackagesBuilder {
     private void processConsequence( Rule rule, RuleImpl ruleImpl, RuleContext ctx ) {
         Consequence consequence = rule.getConsequence();
         ruleImpl.setConsequence( new LambdaConsequence( consequence, ctx ) );
-        String[] requiredDeclarations = Stream.of( consequence.getDeclarations() )
-                                              .map(ctx::getPattern).map( Pattern::getDeclaration )
-                                              .map( Declaration::getIdentifier )
-                                              .toArray(String[]::new);
+
+        Variable[] consequenceVars = consequence.getDeclarations();
+        String[] requiredDeclarations = new String[consequenceVars.length];
+        for (int i = 0; i < consequenceVars.length; i++) {
+            requiredDeclarations[i] = ctx.getPatternId( consequenceVars[i] );
+        }
+
         ruleImpl.setRequiredDeclarationsForConsequence( RuleImpl.DEFAULT_CONSEQUENCE_NAME, requiredDeclarations );
     }
 
@@ -103,28 +117,66 @@ public class KiePackagesBuilder {
         }
 
         switch (condition.getType()) {
-            case PATTERN:
-                org.drools.model.Pattern modelPattern = (org.drools.model.Pattern) condition;
-                Class<?> patternClass = modelPattern.getPatternVariable().getType().asClass();
-                patternClasses.add( patternClass );
-
-                Variable patternVariable = modelPattern.getPatternVariable();
-                Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
-                                               0, // offset will be set by ReteooBuilder
-                                               new ClassObjectType( patternClass ),
-                                               ctx.getPatternId( patternVariable ),
-                                               true );
-                ctx.registerPattern( patternVariable, pattern );
-                addConstraintsToPattern( ctx, pattern, modelPattern, modelPattern.getConstraint() );
+            case PATTERN: {
+                return buildPattern( ctx, condition );
+            }
+            case ACCUMULATE: {
+                Pattern source = buildPattern( ctx, condition );
+                Pattern pattern = new Pattern( 0, new ClassObjectType( Object.class ) );
+                pattern.setSource( buildAccumulate( ctx, (AccumulatePattern) condition, source, pattern ) );
                 return pattern;
+            }
         }
         throw new UnsupportedOperationException();
+    }
+
+    private Pattern buildPattern( RuleContext ctx, Condition condition ) {
+        org.drools.model.Pattern modelPattern = (org.drools.model.Pattern) condition;
+        Pattern pattern = addPatternForVariable( ctx, modelPattern.getPatternVariable() );
+        addConstraintsToPattern( ctx, pattern, modelPattern, modelPattern.getConstraint() );
+        return pattern;
+    }
+
+    private Accumulate buildAccumulate( RuleContext ctx, AccumulatePattern accPattern, Pattern source, Pattern pattern ) {
+        AccumulateFunction<?, ?, ?>[] accFunc = accPattern.getFunctions();
+
+        if (accFunc.length == 1) {
+            pattern.addDeclaration( new Declaration(ctx.getPatternId( accPattern.getBoundVariables()[0] ),
+                                                    getReadAcessor( new ClassObjectType( Object.class ) ),
+                                                    pattern,
+                                                    true) );
+            return new SingleAccumulate( source, new Declaration[0], new LambdaAccumulator( accPattern.getFunctions()[0]));
+        }
+
+        InternalReadAccessor reader = new SelfReferenceClassFieldReader( Object[].class );
+        Accumulator[] accumulators = new Accumulator[accFunc.length];
+        for (int i = 0; i < accPattern.getFunctions().length; i++) {
+            Variable accVar = accPattern.getBoundVariables()[i];
+            pattern.addDeclaration( new Declaration(ctx.getPatternId( accVar ),
+                                                    new ArrayElementReader( reader, i, accVar.getType().asClass()),
+                                                    pattern,
+                                                    true) );
+            accumulators[i] = new LambdaAccumulator( accFunc[i] );
+        }
+        return new MultiAccumulate( source, new Declaration[0], accumulators);
+    }
+
+    private Pattern addPatternForVariable( RuleContext ctx, Variable patternVariable ) {
+        Class<?> patternClass = patternVariable.getType().asClass();
+        patternClasses.add( patternClass );
+        Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
+                                       0, // offset will be set by ReteooBuilder
+                                       new ClassObjectType( patternClass ),
+                                       ctx.getPatternId( patternVariable ),
+                                       true );
+        ctx.registerPattern( patternVariable, pattern );
+        return pattern;
     }
 
     private void addConstraintsToPattern( RuleContext ctx, Pattern pattern, org.drools.model.Pattern modelPattern, Constraint constraint ) {
         if (constraint.getType() == Constraint.Type.SINGLE) {
             SingleConstraint singleConstraint = (SingleConstraint) constraint;
-            Declaration[] declarations = getRequiredDeclaration(ctx, modelPattern, singleConstraint);
+            Declaration[] declarations = getRequiredDeclaration(ctx, singleConstraint);
             ConstraintEvaluator constraintEvaluator = new ConstraintEvaluator( declarations, pattern, singleConstraint );
             if (singleConstraint.getVariables().length > 0) {
                 pattern.addConstraint( new LambdaConstraint( constraintEvaluator ) );
@@ -136,7 +188,7 @@ public class KiePackagesBuilder {
         }
     }
 
-    private Declaration[] getRequiredDeclaration( RuleContext ctx, org.drools.model.Pattern pattern, SingleConstraint singleConstraint ) {
+    private Declaration[] getRequiredDeclaration( RuleContext ctx, SingleConstraint singleConstraint ) {
         return Stream.of( singleConstraint.getVariables() )
                      .map( ctx::getPattern )
                      .map( Pattern::getDeclaration )
