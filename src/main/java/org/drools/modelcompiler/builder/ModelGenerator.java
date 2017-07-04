@@ -129,15 +129,15 @@ public class ModelGenerator {
                     // TODO what if not atomicExprDescr ?
                     Set<String> usedDeclarations = new HashSet<>();
                     Set<String> reactOnProperties = new HashSet<>();
-                    String left = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations, reactOnProperties);
-                    String right = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations, reactOnProperties);
+                    ExpressionTuple left = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations, reactOnProperties);
+                    ExpressionTuple right = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations, reactOnProperties);
                     String combo = null;
                     switch( relationalExprDescr.getOperator() ) {
                         case "==":
-                            combo = new StringBuilder().append(left).append(".equals(").append(right).append(")").toString();
+                            combo = new StringBuilder().append(left.expression).append(".equals(").append(right.expression).append(")").toString();
                             break;
                         default:
-                            combo = new StringBuilder().append(left).append(" ").append(relationalExprDescr.getOperator()).append(" ").append(right).toString();
+                            combo = new StringBuilder().append(left.expression).append(" ").append(relationalExprDescr.getOperator()).append(" ").append(right.expression).toString();
                     }
                     
                     StringBuilder newExpression = new StringBuilder()
@@ -153,17 +153,21 @@ public class ModelGenerator {
                     
                     
                     // -- all indexing stuff --
+                    Class<?> indexType = Stream.of(left, right).map(ExpressionTuple::getIndexType)
+                            .flatMap(x -> optToStream(x))
+                            .findFirst().get();
                     newExpression
                         .append("\n  .indexedBy( ")
+                        .append(indexType.getCanonicalName()).append(".class, ")
                         .append("ConstraintType.")
                             .append(decodeConstraintType.toString())
                             .append(", ")
                         .append("_this -> ")
-                            .append(left)
+                            .append(left.expression)
                             .append(", ")
                         ;
                     if ( constraint.getType() == Constraint.ConstraintType.ALPHA ) { 
-                        newExpression.append(right);
+                        newExpression.append(right.expression);
                     } else if ( constraint.getType() == Constraint.ConstraintType.BETA ) {
                         if ( usedDeclarations.size() > 1 ) {
                             throw new UnsupportedOperationException("TODO"); // TODO how to know which declaration is impacting for the beta index?
@@ -171,7 +175,7 @@ public class ModelGenerator {
                         newExpression
                             .append( usedDeclarations.iterator().next() )
                             .append( " -> " )
-                            .append(right)
+                            .append(right.expression)
                             .append(" ")
                             ;
                     } else {
@@ -205,15 +209,42 @@ public class ModelGenerator {
             }
         }
     }
+    
+    /**
+     * waiting for java 9 Optional improvement
+     */
+    static <T> Stream<T> optToStream(Optional<T> opt) {
+        if (opt.isPresent())
+            return Stream.of(opt.get());
+        else
+            return Stream.empty();
+    }
+    
+    static class ExpressionTuple {
+        private final String expression;
+        private final Optional<Class<?>> indexType;
+        public ExpressionTuple(String expression, Optional<Class<?>> indexType) {
+            super();
+            this.expression = expression;
+            this.indexType = indexType;
+        }
+        public String getExpression() {
+            return expression;
+        }
+        public Optional<Class<?>> getIndexType() {
+            return indexType;
+        }
+    }
 
-    private static String atomicToPart(RuleContext context, Pattern pattern, AtomicExprDescr atomicExprDescr, Set<String> usedDeclarations, Set<String> reactOnProperties) {
+    private static ExpressionTuple atomicToPart(RuleContext context, Pattern pattern, AtomicExprDescr atomicExprDescr, Set<String> usedDeclarations, Set<String> reactOnProperties) {
         if ( atomicExprDescr.isLiteral() ) {
-            return atomicExprDescr.getExpression();
+            return new ExpressionTuple(atomicExprDescr.getExpression(), Optional.empty());
         } else {
             String expression = atomicExprDescr.getExpression();
             String[] parts = expression.split("\\.");
             StringBuilder telescoping = new StringBuilder();
             boolean implicitThis = true;
+            Class<?> typeCursor = ( (ClassObjectType) pattern.getObjectType() ).getClassType();
             for ( int idx = 0; idx < parts.length ; idx++ ) {
                 String part = parts[idx];
                 boolean isGlobal = false;
@@ -228,11 +259,12 @@ public class ModelGenerator {
                     if ( ( idx == 0 && implicitThis ) || ( idx == 1 && implicitThis == false ) ) {
                         reactOnProperties.add(part);
                     }
-                    Method accessor = ClassUtils.getAccessor(( (ClassObjectType) pattern.getObjectType() ).getClassType(), part);
+                    Method accessor = ClassUtils.getAccessor( typeCursor, part );
+                    typeCursor = accessor.getReturnType();
                     telescoping.append( "." + accessor.getName() + "()" );
                 }
             }
-            return implicitThis ? "_this" + telescoping.toString() : telescoping.toString(); 
+            return new ExpressionTuple(implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of(typeCursor)); 
         }
     }
 
