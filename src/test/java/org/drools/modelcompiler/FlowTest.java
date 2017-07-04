@@ -47,11 +47,13 @@ public class FlowTest {
         Rule rule = rule( "beta" )
                 .view(
                         expr("exprA", markV, p -> p.getName().equals("Mark"))
-                                .indexedBy( ConstraintType.EQUAL, Person::getName, "Mark" )
+                                .indexedBy( String.class, ConstraintType.EQUAL, Person::getName, "Mark" )
                                 .reactOn( "name", "age" ), // also react on age, see RuleDescr.lookAheadFieldsOfIdentifier
                         expr("exprB", olderV, p -> !p.getName().equals("Mark"))
+                                .indexedBy( String.class, ConstraintType.NOT_EQUAL, Person::getName, "Mark" )
                                 .reactOn( "name" ),
                         expr("exprC", olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())
+                                .indexedBy( int.class, ConstraintType.GREATER_THAN, Person::getAge, Person::getAge )
                                 .reactOn( "age" )
                      )
                 .then(on(olderV, markV)

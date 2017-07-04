@@ -180,10 +180,24 @@ public class KiePackagesBuilder {
             ConstraintEvaluator constraintEvaluator = new ConstraintEvaluator( declarations, pattern, singleConstraint );
             if (singleConstraint.getVariables().length > 0) {
                 pattern.addConstraint( new LambdaConstraint( constraintEvaluator ) );
+                addFieldsToPatternWatchlist( pattern, singleConstraint.getReactiveProps() );
             }
         } else if (modelPattern.getConstraint().getType() == Constraint.Type.AND) {
             for (Constraint child : constraint.getChildren()) {
                 addConstraintsToPattern(ctx, pattern, modelPattern, child);
+            }
+        }
+    }
+
+    private void addFieldsToPatternWatchlist( Pattern pattern, String[] fields ) {
+        if (fields != null && fields.length > 0) {
+            Collection<String> watchlist = pattern.getListenedProperties();
+            if ( watchlist == null ) {
+                watchlist = new HashSet<>( );
+                pattern.setListenedProperties( watchlist );
+            }
+            for (String field : fields) {
+                watchlist.add( field );
             }
         }
     }

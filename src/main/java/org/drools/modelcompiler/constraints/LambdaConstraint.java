@@ -2,8 +2,6 @@ package org.drools.modelcompiler.constraints;
 
 import java.util.List;
 
-import org.drools.core.base.ValueType;
-import org.drools.core.base.field.ObjectFieldImpl;
 import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.reteoo.PropertySpecificUtil;
@@ -18,10 +16,11 @@ import org.drools.core.spi.Tuple;
 import org.drools.core.util.AbstractHashTable.FieldIndex;
 import org.drools.core.util.bitmask.BitMask;
 import org.drools.core.util.index.IndexUtil;
-import org.drools.model.AlphaIndex;
+import org.drools.model.BetaIndex;
 import org.drools.model.Index;
 
 import static org.drools.core.reteoo.PropertySpecificUtil.getEmptyPropertyReactiveMask;
+import static org.drools.core.rule.constraint.MvelConstraint.INDEX_EVALUATOR;
 
 public class LambdaConstraint extends MutableTypeConstraint implements IndexableConstraint {
 
@@ -29,6 +28,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     private FieldValue field;
     private InternalReadAccessor readAccessor;
+    private Declaration indexingDeclaration;
 
     public LambdaConstraint(ConstraintEvaluator evaluator) {
         this.evaluator = evaluator;
@@ -37,12 +37,12 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     private void initIndexes() {
         Index index = evaluator.getIndex();
-        if (index instanceof AlphaIndex) {
-            Object value = ( (AlphaIndex) index ).getRightValue();
-            field = new ObjectFieldImpl( value );
-            ValueType vType = ValueType.determineValueType( value.getClass() );
+        if (index != null) {
             // TODO LambdaReadAccessor.index ???
-            readAccessor = new LambdaReadAccessor( 0, value.getClass(), vType, ( (AlphaIndex) index ).getLeftOperandExtractor() );
+            readAccessor = new LambdaReadAccessor( 0, index.getIndexedClass(), index.getLeftOperandExtractor() );
+            if (index instanceof BetaIndex) {
+                indexingDeclaration = evaluator.getRequiredDeclarations()[1];
+            }
         }
     }
 
@@ -108,8 +108,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public boolean isUnification() {
-        throw new UnsupportedOperationException();
-
+        return false;
     }
 
     @Override
@@ -148,7 +147,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public FieldIndex getFieldIndex() {
-        throw new UnsupportedOperationException();
+        return new FieldIndex(readAccessor, indexingDeclaration, INDEX_EVALUATOR);
     }
 
     @Override

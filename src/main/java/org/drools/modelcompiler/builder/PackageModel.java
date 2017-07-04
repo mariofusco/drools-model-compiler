@@ -39,10 +39,12 @@ public class PackageModel {
     }
 
     public String getVarsSource() {
+//        if (true) return getVariableSource();
         return null;
     }
 
     public String getRulesSource() {
+//        if (true) return getRuleModelSource();
         StringBuilder source = new StringBuilder();
         source.append(
                 "package "+name+";\n" +
@@ -123,11 +125,13 @@ public class PackageModel {
                "        Rule rule = rule( \"beta\" )\n" +
                "                .view(\n" +
                "                        expr(markV, p -> p.getName().equals(\"Mark\"))\n" +
-               "                                .indexedBy( ConstraintType.EQUAL, Person::getName, \"Mark\" )\n" +
+               "                                .indexedBy( String.class, ConstraintType.EQUAL, Person::getName, \"Mark\" )\n" +
                "                                .reactOn( \"name\", \"age\" ),\n" +
                "                        expr(olderV, p -> !p.getName().equals(\"Mark\"))\n" +
+               "                                .indexedBy( String.class, ConstraintType.NOT_EQUAL, Person::getName, \"Mark\" )\n" +
                "                                .reactOn( \"name\" ),\n" +
                "                        expr(olderV, markV, (p1, p2) -> p1.getAge() > p2.getAge())\n" +
+               "                                .indexedBy( int.class, ConstraintType.GREATER_THAN, Person::getAge, Person::getAge )\n" +
                "                                .reactOn( \"age\" )\n" +
                "                     )\n" +
                "                .then(c -> c.on(olderV, markV)\n" +

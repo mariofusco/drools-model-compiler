@@ -26,8 +26,8 @@ public class LambdaReadAccessor extends BaseObjectClassFieldReader implements In
 
     private final Function1 lambda;
 
-    public LambdaReadAccessor( int index, Class<?> fieldType, ValueType valueType, Function1 lambda ) {
-        super(index, fieldType, valueType);
+    public LambdaReadAccessor( int index, Class<?> fieldType, Function1 lambda ) {
+        super(index, fieldType, ValueType.determineValueType( fieldType ));
         this.lambda = lambda;
     }
 
