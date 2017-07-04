@@ -18,10 +18,12 @@ package org.drools.modelcompiler.builder;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -39,6 +41,8 @@ import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.Constraint;
 import org.drools.core.util.ClassUtils;
+import org.drools.core.util.index.IndexUtil;
+import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
 public class ModelGenerator {
@@ -120,11 +124,13 @@ public class ModelGenerator {
                 System.out.println(singletonDescr);
                 if ( singletonDescr instanceof RelationalExprDescr ) {
                     RelationalExprDescr relationalExprDescr = (RelationalExprDescr) singletonDescr;
+                    IndexUtil.ConstraintType decodeConstraintType = IndexUtil.ConstraintType.decode( relationalExprDescr.getOperator() );
                     // to be visited
                     // TODO what if not atomicExprDescr ?
                     Set<String> usedDeclarations = new HashSet<>();
-                    String left = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations);
-                    String right = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations);
+                    Set<String> reactOnProperties = new HashSet<>();
+                    String left = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations, reactOnProperties);
+                    String right = atomicToPart(context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations, reactOnProperties);
                     String combo = null;
                     switch( relationalExprDescr.getOperator() ) {
                         case "==":
@@ -134,7 +140,7 @@ public class ModelGenerator {
                             combo = new StringBuilder().append(left).append(" ").append(relationalExprDescr.getOperator()).append(" ").append(right).toString();
                     }
                     
-                    String newExpression = new StringBuilder()
+                    StringBuilder newExpression = new StringBuilder()
                             .append("expr( ")
                             .append( Stream.concat(Stream.of(pattern.getDeclaration().getBindingName()), usedDeclarations.stream()).map(x->"var_"+x).collect(Collectors.joining(", ")) )
                             .append(", ")
@@ -143,9 +149,56 @@ public class ModelGenerator {
                             .append( " ) -> " )
                             .append(combo)
                             .append(" )")
-                            .toString();
+                            ;
+                    
+                    
+                    // -- all indexing stuff --
+                    newExpression
+                        .append("\n  .indexedBy( ")
+                        .append("ConstraintType.")
+                            .append(decodeConstraintType.toString())
+                            .append(", ")
+                        .append("_this -> ")
+                            .append(left)
+                            .append(", ")
+                        ;
+                    if ( constraint.getType() == Constraint.ConstraintType.ALPHA ) { 
+                        newExpression.append(right);
+                    } else if ( constraint.getType() == Constraint.ConstraintType.BETA ) {
+                        if ( usedDeclarations.size() > 1 ) {
+                            throw new UnsupportedOperationException("TODO"); // TODO how to know which declaration is impacting for the beta index?
+                        }
+                        newExpression
+                            .append( usedDeclarations.iterator().next() )
+                            .append( " -> " )
+                            .append(right)
+                            .append(" ")
+                            ;
+                    } else {
+                        throw new UnsupportedOperationException("TODO"); // TODO
+                    }
+                    newExpression
+                        .append(" )");
+                    // -- END all indexing stuff --
+                    
+                    
+                    // -- all reactOn stuff --
+                    if ( !reactOnProperties.isEmpty() ) {
+                        String reactOnCsv = Stream.concat( reactOnProperties.stream(),
+                                                           Optional.ofNullable( pattern.getListenedProperties() ).map(Collection::stream).orElseGet(Stream::empty) )
+                                .map( p -> new StringBuilder("\"").append(p).append("\"").toString() )
+                                .collect(Collectors.joining(", "));
+                        newExpression
+                            .append("\n  .reactOn( ")
+                            .append( reactOnCsv )
+                            .append(" )");
+                    }
+                    // -- END all reactOn stuff --
+                    
+                    
+                        
                     System.out.println("Adding newExpression: "+newExpression);
-                    context.expressions.add( newExpression );
+                    context.expressions.add( newExpression.toString() );
                 }
             } else {
                 throw new UnsupportedOperationException("TODO"); // TODO
@@ -153,7 +206,7 @@ public class ModelGenerator {
         }
     }
 
-    private static String atomicToPart(RuleContext context, Pattern pattern, AtomicExprDescr atomicExprDescr, Set<String> usedDeclarations) {
+    private static String atomicToPart(RuleContext context, Pattern pattern, AtomicExprDescr atomicExprDescr, Set<String> usedDeclarations, Set<String> reactOnProperties) {
         if ( atomicExprDescr.isLiteral() ) {
             return atomicExprDescr.getExpression();
         } else {
@@ -172,6 +225,9 @@ public class ModelGenerator {
                     usedDeclarations.add( part );
                     telescoping.append( part );
                 } else {
+                    if ( ( idx == 0 && implicitThis ) || ( idx == 1 && implicitThis == false ) ) {
+                        reactOnProperties.add(part);
+                    }
                     Method accessor = ClassUtils.getAccessor(( (ClassObjectType) pattern.getObjectType() ).getClassType(), part);
                     telescoping.append( "." + accessor.getName() + "()" );
                 }

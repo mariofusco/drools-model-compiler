@@ -81,6 +81,8 @@ public class PackageModel {
         System.out.println("=====");
     }
     
+    @SuppressWarnings("unused")
+    @Deprecated
     private static String getVariableSource() {
         return "package myrules;\n" +
                "" +
@@ -95,6 +97,8 @@ public class PackageModel {
                "}\n";
     }
 
+    @SuppressWarnings("unused")
+    @Deprecated
     private static String getRuleModelSource() {
         return "package myrules;\n" +
                "" +
