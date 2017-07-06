@@ -52,7 +52,6 @@ public class PackageModel {
                 "import java.util.*;\n" +
                 "import org.drools.model.*;\n" +
                 "import static org.drools.model.DSL.*;\n" +
-                "import org.drools.modelcompiler.Person;\n" +
                 "import org.drools.model.Index.ConstraintType;\n" +
                 "\n" +
                 "public class Rules implements Model {\n" +
