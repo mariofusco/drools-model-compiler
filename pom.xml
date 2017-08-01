@@ -36,6 +36,11 @@
       <artifactId>drools-compiler</artifactId>
       <version>${version.drools}</version>
     </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drlx-compiler</artifactId>
+      <version>${version.drools}</version>
+    </dependency>
 
     <dependency>
       <groupId>org.openjdk.jmh</groupId>

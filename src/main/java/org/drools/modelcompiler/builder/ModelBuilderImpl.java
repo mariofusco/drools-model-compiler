@@ -24,7 +24,7 @@ import org.drools.compiler.builder.impl.KnowledgeBuilderImpl;
 import org.drools.compiler.compiler.PackageRegistry;
 import org.drools.compiler.lang.descr.PackageDescr;
 
-import static org.drools.modelcompiler.builder.ModelGenerator.generateModel;
+import static org.drools.modelcompiler.builder.generator.ModelGenerator.generateModel;
 
 public class ModelBuilderImpl extends KnowledgeBuilderImpl {
 
