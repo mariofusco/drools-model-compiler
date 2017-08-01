@@ -31,8 +31,8 @@ public class ModelBuilderImpl extends KnowledgeBuilderImpl {
     private final List<PackageModel> packageModels = new ArrayList<>();
 
     @Override
-    protected void compileAllRules( PackageDescr packageDescr, PackageRegistry pkgRegistry ) {
-        compileKnowledgePackages( packageDescr, pkgRegistry );
+    protected void compileKnowledgePackages( PackageDescr packageDescr, PackageRegistry pkgRegistry ) {
+        super.compileKnowledgePackages( packageDescr, pkgRegistry );
         List<RuleDescrImpl> collect = packageDescr.getRules().stream()
             .map(descr -> new RuleDescrImpl(descr, pkgRegistry.getPackage().getRule(descr.getName())))
             .collect(Collectors.toList());
