@@ -28,10 +28,10 @@ import org.drools.modelcompiler.builder.generator.ModelGenerator.RuleContext;
 
 public class MvelParseUtil {
 
-    public static TypedExpression toTypedExpression( RuleContext context, Pattern pattern, AtomicExprDescr atomicExprDescr,
+    public static IndexedExpression toTypedExpression( RuleContext context, Pattern pattern, AtomicExprDescr atomicExprDescr,
                                                      Set<String> usedDeclarations, Set<String> reactOnProperties ) {
         if ( atomicExprDescr.isLiteral() ) {
-            return new TypedExpression( atomicExprDescr.getExpression(), Optional.empty());
+            return new IndexedExpression( atomicExprDescr.getExpression(), Optional.empty());
         } else {
             String expression = atomicExprDescr.getExpression();
             String[] parts = expression.split("\\.");
@@ -57,7 +57,7 @@ public class MvelParseUtil {
                     telescoping.append( "." + accessor.getName() + "()" );
                 }
             }
-            return new TypedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
+            return new IndexedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
         }
     }
 

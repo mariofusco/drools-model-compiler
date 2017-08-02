@@ -18,19 +18,32 @@ package org.drools.modelcompiler.builder.generator;
 
 import java.util.Optional;
 
-public class TypedExpression {
+import com.github.javaparser.ast.expr.Expression;
 
-    private final String expression;
+public class IndexedExpression {
+
+    private final Expression expression;
+    private final String removeMe;
     private final Optional<Class<?>> indexType;
 
-    public TypedExpression( String expression, Optional<Class<?>> indexType ) {
-        super();
+    public IndexedExpression( Expression expression, Optional<Class<?>> indexType ) {
         this.expression = expression;
         this.indexType = indexType;
+        this.removeMe = null;
+    }
+    
+    public IndexedExpression( String expression, Optional<Class<?>> indexType ) {
+        this.removeMe = expression;
+        this.indexType = indexType;
+        this.expression = null;
+    }
+    
+    public Expression getExpression() {
+        return expression;
     }
 
-    public String getExpression() {
-        return expression;
+    public String getExpressionAsString() {
+        return expression != null ? expression.toString() : removeMe ;
     }
 
     public Optional<Class<?>> getIndexType() {

@@ -65,30 +65,23 @@ public class DrlxParseUtil {
         throw new UnsupportedOperationException( "Unknown operator " + operator );
     }
 
-    public static TypedExpression toTypedExpression( RuleContext context, Pattern pattern, Expression drlxExpr,
+    public static IndexedExpression toTypedExpression( RuleContext context, Pattern pattern, Expression drlxExpr,
                                                      Set<String> usedDeclarations, Set<String> reactOnProperties ) {
         
         Class<?> typeCursor = ( (ClassObjectType) pattern.getObjectType() ).getClassType();
         
         if ( drlxExpr instanceof LiteralExpr ) {
-            return new TypedExpression( drlxExpr.toString(), Optional.empty());
+            return new IndexedExpression( drlxExpr , Optional.empty());
         } else if ( drlxExpr instanceof NameExpr ) {
             String name = drlxExpr.toString();
             reactOnProperties.add(name);
             Method accessor = ClassUtils.getAccessor( typeCursor, name );
             Class<?> accessorReturnType = accessor.getReturnType();
-            StringBuilder simpleNameExpr = new StringBuilder("_this").append(".").append(accessor.getName()).append("()");
-            
-            // wip
-            LambdaExpr l = new LambdaExpr();
-            l.setEnclosingParameters(true);
-            l.addParameter(new Parameter(new UnknownType(), "_this"));
+
             NameExpr _this = new NameExpr("_this");
-            MethodCallExpr body = new MethodCallExpr(_this, name);
-            l.setBody( new ExpressionStmt( body ) );
-            System.out.println( new ExpressionStmt( l ) );
+            MethodCallExpr body = new MethodCallExpr( _this, accessor.getName() );
             
-            return new TypedExpression( simpleNameExpr.toString(), Optional.of( accessorReturnType ));
+            return new IndexedExpression( body, Optional.of( accessorReturnType ));
         } else if ( drlxExpr instanceof FieldAccessExpr ) {
             Node node0 = drlxExpr.getChildNodes().get(0);
             Node firstProperty = drlxExpr.getChildNodes().get(1);
@@ -101,26 +94,14 @@ public class DrlxParseUtil {
             }
             reactOnProperties.add( firstProperty.toString() );
             
-            StringBuilder telescoping = new StringBuilder( node0.toString() );
-            // wip
-            LambdaExpr l = new LambdaExpr();
-            l.setEnclosingParameters(true);
-            l.addParameter(new Parameter(new UnknownType(), node0.toString()));
-            NameExpr startName = new NameExpr(node0.toString());
-            l.setBody( new ExpressionStmt( startName ) );
+            Expression previous = new NameExpr(node0.toString());
             for ( Node part : subList ) {
                 Method accessor = ClassUtils.getAccessor( typeCursor, part.toString() );
                 typeCursor = accessor.getReturnType();
-                telescoping.append( "." ).append( accessor.getName() ).append( "()" );
-                
-                Expression previous = ((ExpressionStmt)l.getBody()).getExpression();
-                MethodCallExpr body = new MethodCallExpr(previous, part.toString());
-                ((ExpressionStmt)l.getBody()).setExpression( body );
+                previous = new MethodCallExpr( previous, accessor.getName() );
             }
             
-            System.out.println( new ExpressionStmt( l ) );
-
-            return new TypedExpression( telescoping.toString(), Optional.of( typeCursor ));
+            return new IndexedExpression( previous, Optional.of( typeCursor ));
         } else {
             // TODO the below should not be needed anymore...
             drlxExpr.getChildNodes();
@@ -148,7 +129,7 @@ public class DrlxParseUtil {
                     telescoping.append( "." + accessor.getName() + "()" );
                 }
             }
-            return new TypedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
+            return new IndexedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
         }
     }
 }
