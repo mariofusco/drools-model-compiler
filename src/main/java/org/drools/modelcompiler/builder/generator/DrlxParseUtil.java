@@ -100,12 +100,26 @@ public class DrlxParseUtil {
                 // TODO would it be fine to assume is a global if it's not in the declarations?
             }
             reactOnProperties.add( firstProperty.toString() );
+            
             StringBuilder telescoping = new StringBuilder( node0.toString() );
+            // wip
+            LambdaExpr l = new LambdaExpr();
+            l.setEnclosingParameters(true);
+            l.addParameter(new Parameter(new UnknownType(), node0.toString()));
+            NameExpr startName = new NameExpr(node0.toString());
+            l.setBody( new ExpressionStmt( startName ) );
             for ( Node part : subList ) {
                 Method accessor = ClassUtils.getAccessor( typeCursor, part.toString() );
                 typeCursor = accessor.getReturnType();
                 telescoping.append( "." ).append( accessor.getName() ).append( "()" );
+                
+                Expression previous = ((ExpressionStmt)l.getBody()).getExpression();
+                MethodCallExpr body = new MethodCallExpr(previous, part.toString());
+                ((ExpressionStmt)l.getBody()).setExpression( body );
             }
+            
+            System.out.println( new ExpressionStmt( l ) );
+
             return new TypedExpression( telescoping.toString(), Optional.of( typeCursor ));
         } else {
             // TODO the below should not be needed anymore...
