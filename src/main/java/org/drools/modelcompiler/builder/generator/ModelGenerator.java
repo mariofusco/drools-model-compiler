@@ -17,7 +17,6 @@
 package org.drools.modelcompiler.builder.generator;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,17 +27,19 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
+import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.UnknownType;
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
@@ -216,65 +217,61 @@ public class ModelGenerator {
                                               Set<String> usedDeclarations, Set<String> reactOnProperties,
                                               IndexedExpression left, IndexedExpression right, Expression combo ) {
         
-        LambdaExpr exprPredicate = new LambdaExpr();
-        exprPredicate.setEnclosingParameters(true);
-        Stream.concat( Stream.of( "_this" ), usedDeclarations.stream() ).map( s -> new Parameter(new UnknownType(), s) ).forEach(exprPredicate::addParameter);
-        exprPredicate.setBody( new ExpressionStmt( combo ) );
+        MethodCallExpr exprDSL = new MethodCallExpr(null, "expr");
+        exprDSL.addArgument( new NameExpr("var_" + pattern.getDeclaration().getBindingName()) );
+        usedDeclarations.stream().map( x -> new NameExpr( "var_" + x )).forEach(exprDSL::addArgument);
         
-        StringBuilder newExpression = new StringBuilder()
-                .append( "expr( " )
-                .append( Stream.concat( Stream.of( pattern.getDeclaration().getBindingName() ), usedDeclarations.stream() ).map( x -> "var_" + x ).collect( Collectors.joining( ", " ) ) )
-                .append( ", " )
-                .append( exprPredicate )
-                .append( " )" );
-
-
+        LambdaExpr exprDSL_predicate = new LambdaExpr();
+        exprDSL_predicate.setEnclosingParameters(true);
+        exprDSL_predicate.addParameter(new Parameter(new UnknownType(), "_this"));
+        usedDeclarations.stream().map( s -> new Parameter(new UnknownType(), s) ).forEach(exprDSL_predicate::addParameter);
+        exprDSL_predicate.setBody( new ExpressionStmt( combo ) );
+        
+        exprDSL.addArgument(exprDSL_predicate);
+        
         // -- all indexing stuff --
         Class<?> indexType = Stream.of( left, right ).map( IndexedExpression::getIndexType )
                                    .flatMap( x -> optToStream( x ) )
                                    .findFirst().get();
-        newExpression
-                .append( "\n  .indexedBy( " )
-                .append( indexType.getCanonicalName() ).append( ".class, " )
-                .append( "ConstraintType." )
-                .append( decodeConstraintType.toString() )
-                .append( ", " )
-                .append( "_this -> " )
-                .append( left.getExpressionAsString() )
-                .append( ", " )
-        ;
+        
+        ClassExpr indexedBy_indexedClass = new ClassExpr( new ClassOrInterfaceType( indexType.getCanonicalName() ) );
+        FieldAccessExpr indexedBy_constraintType = new FieldAccessExpr( new NameExpr( "org.drools.model.Index.ConstraintType" ), decodeConstraintType.toString()); // not 100% accurate as the type in "nameExpr" is actually parsed if it was JavaParsers as a big chain of FieldAccessExpr
+        LambdaExpr indexedBy_leftOperandExtractor = new LambdaExpr();
+        indexedBy_leftOperandExtractor.addParameter(new Parameter(new UnknownType(), "_this"));
+        indexedBy_leftOperandExtractor.setBody( new ExpressionStmt( left.getExpression() ) );
+
+        MethodCallExpr indexedByDSL = new MethodCallExpr(exprDSL, "indexedBy");
+        indexedByDSL.addArgument( indexedBy_indexedClass );
+        indexedByDSL.addArgument( indexedBy_constraintType );
+        indexedByDSL.addArgument( indexedBy_leftOperandExtractor );
         if ( constraint.getType() == Constraint.ConstraintType.ALPHA ) {
-            newExpression.append( right.getExpressionAsString() );
+            Expression indexedBy_rightValue = right.getExpression();
+            indexedByDSL.addArgument( indexedBy_rightValue );
         } else if ( constraint.getType() == Constraint.ConstraintType.BETA ) {
             if ( usedDeclarations.size() > 1 ) {
-                throw new UnsupportedOperationException( "TODO" ); // TODO how to know which declaration is impacting for the beta index?
+                throw new UnsupportedOperationException( "UNKNOWN" ); // TODO how to know which declaration is impacting for the beta index?
             }
-            newExpression
-                    .append( usedDeclarations.iterator().next() )
-                    .append( " -> " )
-                    .append( right.getExpressionAsString() )
-                    .append( " " )
-            ;
+            LambdaExpr indexedBy_rightOperandExtractor = new LambdaExpr();
+            indexedBy_rightOperandExtractor.addParameter(new Parameter(new UnknownType(), usedDeclarations.iterator().next()));
+            indexedBy_rightOperandExtractor.setBody( new ExpressionStmt( right.getExpression() ) );
+            indexedByDSL.addArgument( indexedBy_rightOperandExtractor );
         } else {
             throw new UnsupportedOperationException( "TODO" ); // TODO
         }
-        newExpression.append( " )" );
         // -- END all indexing stuff --
-
 
         // -- all reactOn stuff --
         if ( !reactOnProperties.isEmpty() ) {
-            String reactOnCsv = Stream.concat( reactOnProperties.stream(),
-                                               Optional.ofNullable( pattern.getListenedProperties() ).map( Collection::stream ).orElseGet( Stream::empty ) )
-                                      .map( p -> new StringBuilder( "\"" ).append( p ).append( "\"" ).toString() )
-                                      .collect( Collectors.joining( ", " ) );
-            newExpression
-                    .append( "\n  .reactOn( " )
-                    .append( reactOnCsv )
-                    .append( " )" );
+            MethodCallExpr reactOnDSL = new MethodCallExpr(indexedByDSL, "reactOn");
+            Stream.concat( reactOnProperties.stream(),
+                           Optional.ofNullable( pattern.getListenedProperties() ).map( Collection::stream ).orElseGet( Stream::empty ) )
+                           .map( p -> new StringLiteralExpr( p ) )
+                           .forEach( reactOnDSL::addArgument );
+            
+            return reactOnDSL.toString();
         }
 
-        return newExpression.toString();
+        return indexedByDSL.toString();
     }
 
     /**
