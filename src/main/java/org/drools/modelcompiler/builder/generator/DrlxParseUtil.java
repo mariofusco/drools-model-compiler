@@ -17,12 +17,17 @@
 package org.drools.modelcompiler.builder.generator;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LiteralExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import org.drools.core.base.ClassObjectType;
 import org.drools.core.rule.Pattern;
 import org.drools.core.util.ClassUtils;
@@ -50,17 +55,51 @@ public class DrlxParseUtil {
         throw new UnsupportedOperationException( "Unknown operator " + operator );
     }
 
-    public static TypedExpression toTypedExpression( RuleContext context, Pattern pattern, Expression drlxExpr,
+    public static IndexedExpression toTypedExpression( RuleContext context, Pattern pattern, Expression drlxExpr,
                                                      Set<String> usedDeclarations, Set<String> reactOnProperties ) {
+        
+        Class<?> typeCursor = ( (ClassObjectType) pattern.getObjectType() ).getClassType();
+        
         if ( drlxExpr instanceof LiteralExpr ) {
-            return new TypedExpression( drlxExpr.toString(), Optional.empty());
+            return new IndexedExpression( drlxExpr , Optional.empty());
+        } else if ( drlxExpr instanceof NameExpr ) {
+            String name = drlxExpr.toString();
+            reactOnProperties.add(name);
+            Method accessor = ClassUtils.getAccessor( typeCursor, name );
+            Class<?> accessorReturnType = accessor.getReturnType();
+
+            NameExpr _this = new NameExpr("_this");
+            MethodCallExpr body = new MethodCallExpr( _this, accessor.getName() );
+            
+            return new IndexedExpression( body, Optional.of( accessorReturnType ));
+        } else if ( drlxExpr instanceof FieldAccessExpr ) {
+            Node node0 = drlxExpr.getChildNodes().get(0);
+            Node firstProperty = drlxExpr.getChildNodes().get(1);
+            List<Node> subList = drlxExpr.getChildNodes().subList(1, drlxExpr.getChildNodes().size());
+            if ( context.declarations.containsKey(node0.toString()) ) {
+                usedDeclarations.add( node0.toString() );
+            } else {
+                throw new UnsupportedOperationException("referring to a declaration I don't know about");
+                // TODO would it be fine to assume is a global if it's not in the declarations?
+            }
+            reactOnProperties.add( firstProperty.toString() );
+            
+            Expression previous = new NameExpr(node0.toString());
+            for ( Node part : subList ) {
+                Method accessor = ClassUtils.getAccessor( typeCursor, part.toString() );
+                typeCursor = accessor.getReturnType();
+                previous = new MethodCallExpr( previous, accessor.getName() );
+            }
+            
+            return new IndexedExpression( previous, Optional.of( typeCursor ));
         } else {
-            // TODO avoid String parsing, use JavaPaser AST instead
+            // TODO the below should not be needed anymore...
+            drlxExpr.getChildNodes();
             String expression = drlxExpr.toString();
             String[] parts = expression.split("\\.");
             StringBuilder telescoping = new StringBuilder();
             boolean implicitThis = true;
-            Class<?> typeCursor = ( (ClassObjectType) pattern.getObjectType() ).getClassType();
+            
             for ( int idx = 0; idx < parts.length ; idx++ ) {
                 String part = parts[idx];
                 boolean isGlobal = false;
@@ -80,7 +119,7 @@ public class DrlxParseUtil {
                     telescoping.append( "." + accessor.getName() + "()" );
                 }
             }
-            return new TypedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
+            return new IndexedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
         }
     }
 }

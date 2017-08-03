@@ -27,9 +27,20 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
+import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.UnknownType;
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
 import org.drools.compiler.lang.descr.BaseDescr;
@@ -143,19 +154,24 @@ public class ModelGenerator {
         IndexUtil.ConstraintType decodeConstraintType = DrlxParseUtil.toConstraintType( operator );
         Set<String> usedDeclarations = new HashSet<>();
         Set<String> reactOnProperties = new HashSet<>();
-        TypedExpression left = DrlxParseUtil.toTypedExpression( context, pattern, binaryExpr.getLeft(), usedDeclarations, reactOnProperties );
-        TypedExpression right = DrlxParseUtil.toTypedExpression( context, pattern, binaryExpr.getRight(), usedDeclarations, reactOnProperties );
+        IndexedExpression left = DrlxParseUtil.toTypedExpression( context, pattern, binaryExpr.getLeft(), usedDeclarations, reactOnProperties );
+        IndexedExpression right = DrlxParseUtil.toTypedExpression( context, pattern, binaryExpr.getRight(), usedDeclarations, reactOnProperties );
 
-        String combo = null;
+        Expression combo = null;
         switch ( operator ) {
             case EQUALS:
-                combo = new StringBuilder().append( left.getExpression() ).append( ".equals(" ).append( right.getExpression() ).append( ")" ).toString();
+                MethodCallExpr methodCallExpr = new MethodCallExpr( left.getExpression(), "equals" );
+                methodCallExpr.addArgument( right.getExpression() ); // don't create NodeList with static method because missing "parent for child" would null and NPE
+                combo = methodCallExpr; 
                 break;
             case NOT_EQUALS:
-                combo = new StringBuilder().append( "!" ).append( left.getExpression() ).append( ".equals(" ).append( right.getExpression() ).append( ")" ).toString();
+                MethodCallExpr methodCallExpr2 = new MethodCallExpr( left.getExpression(), "equals" );
+                methodCallExpr2.addArgument( right.getExpression() );
+                combo = methodCallExpr2; 
+                combo = new UnaryExpr( combo, UnaryExpr.Operator.LOGICAL_COMPLEMENT );
                 break;
             default:
-                combo = new StringBuilder().append( left.getExpression() ).append( " " ).append( operator.asString() ).append( " " ).append( right.getExpression() ).toString();
+                combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
         }
 
         return buildDslExpression( pattern, constraint, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo );
@@ -180,83 +196,82 @@ public class ModelGenerator {
         // TODO what if not atomicExprDescr ?
         Set<String> usedDeclarations = new HashSet<>();
         Set<String> reactOnProperties = new HashSet<>();
-        TypedExpression left = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations, reactOnProperties );
-        TypedExpression right = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations, reactOnProperties );
+        IndexedExpression left = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations, reactOnProperties );
+        IndexedExpression right = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations, reactOnProperties );
         String combo = null;
         switch ( relationalExprDescr.getOperator() ) {
             case "==":
-                combo = new StringBuilder().append( left.getExpression() ).append( ".equals(" ).append( right.getExpression() ).append( ")" ).toString();
+                combo = new StringBuilder().append( left.getExpressionAsString() ).append( ".equals(" ).append( right.getExpressionAsString() ).append( ")" ).toString();
                 break;
             case "!=":
-                combo = new StringBuilder().append( "!" ).append( left.getExpression() ).append( ".equals(" ).append( right.getExpression() ).append( ")" ).toString();
+                combo = new StringBuilder().append( "!" ).append( left.getExpressionAsString() ).append( ".equals(" ).append( right.getExpressionAsString() ).append( ")" ).toString();
                 break;
             default:
-                combo = new StringBuilder().append( left.getExpression() ).append( " " ).append( relationalExprDescr.getOperator() ).append( " " ).append( right.getExpression() ).toString();
+                combo = new StringBuilder().append( left.getExpressionAsString() ).append( " " ).append( relationalExprDescr.getOperator() ).append( " " ).append( right.getExpressionAsString() ).toString();
         }
 
-        return buildDslExpression( pattern, constraint, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo );
+        return buildDslExpression( pattern, constraint, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ) );
     }
 
     private static String buildDslExpression( Pattern pattern, Constraint constraint, ConstraintType decodeConstraintType,
                                               Set<String> usedDeclarations, Set<String> reactOnProperties,
-                                              TypedExpression left, TypedExpression right, String combo ) {
-        StringBuilder newExpression = new StringBuilder()
-                .append( "expr( " )
-                .append( Stream.concat( Stream.of( pattern.getDeclaration().getBindingName() ), usedDeclarations.stream() ).map( x -> "var_" + x ).collect( Collectors.joining( ", " ) ) )
-                .append( ", " )
-                .append( "( " )
-                .append( Stream.concat( Stream.of( "_this" ), usedDeclarations.stream() ).collect( Collectors.joining( ", " ) ) )
-                .append( " ) -> " )
-                .append( combo )
-                .append( " )" );
-
-
+                                              IndexedExpression left, IndexedExpression right, Expression combo ) {
+        
+        MethodCallExpr exprDSL = new MethodCallExpr(null, "expr");
+        exprDSL.addArgument( new NameExpr("var_" + pattern.getDeclaration().getBindingName()) );
+        usedDeclarations.stream().map( x -> new NameExpr( "var_" + x )).forEach(exprDSL::addArgument);
+        
+        LambdaExpr exprDSL_predicate = new LambdaExpr();
+        exprDSL_predicate.setEnclosingParameters(true);
+        exprDSL_predicate.addParameter(new Parameter(new UnknownType(), "_this"));
+        usedDeclarations.stream().map( s -> new Parameter(new UnknownType(), s) ).forEach(exprDSL_predicate::addParameter);
+        exprDSL_predicate.setBody( new ExpressionStmt( combo ) );
+        
+        exprDSL.addArgument(exprDSL_predicate);
+        
         // -- all indexing stuff --
-        Class<?> indexType = Stream.of( left, right ).map( TypedExpression::getIndexType )
+        Class<?> indexType = Stream.of( left, right ).map( IndexedExpression::getIndexType )
                                    .flatMap( x -> optToStream( x ) )
                                    .findFirst().get();
-        newExpression
-                .append( "\n  .indexedBy( " )
-                .append( indexType.getCanonicalName() ).append( ".class, " )
-                .append( "ConstraintType." )
-                .append( decodeConstraintType.toString() )
-                .append( ", " )
-                .append( "_this -> " )
-                .append( left.getExpression() )
-                .append( ", " )
-        ;
+        
+        ClassExpr indexedBy_indexedClass = new ClassExpr( new ClassOrInterfaceType( indexType.getCanonicalName() ) );
+        FieldAccessExpr indexedBy_constraintType = new FieldAccessExpr( new NameExpr( "org.drools.model.Index.ConstraintType" ), decodeConstraintType.toString()); // not 100% accurate as the type in "nameExpr" is actually parsed if it was JavaParsers as a big chain of FieldAccessExpr
+        LambdaExpr indexedBy_leftOperandExtractor = new LambdaExpr();
+        indexedBy_leftOperandExtractor.addParameter(new Parameter(new UnknownType(), "_this"));
+        indexedBy_leftOperandExtractor.setBody( new ExpressionStmt( left.getExpression() ) );
+
+        MethodCallExpr indexedByDSL = new MethodCallExpr(exprDSL, "indexedBy");
+        indexedByDSL.addArgument( indexedBy_indexedClass );
+        indexedByDSL.addArgument( indexedBy_constraintType );
+        indexedByDSL.addArgument( indexedBy_leftOperandExtractor );
         if ( constraint.getType() == Constraint.ConstraintType.ALPHA ) {
-            newExpression.append( right.getExpression() );
+            Expression indexedBy_rightValue = right.getExpression();
+            indexedByDSL.addArgument( indexedBy_rightValue );
         } else if ( constraint.getType() == Constraint.ConstraintType.BETA ) {
             if ( usedDeclarations.size() > 1 ) {
-                throw new UnsupportedOperationException( "TODO" ); // TODO how to know which declaration is impacting for the beta index?
+                throw new UnsupportedOperationException( "UNKNOWN" ); // TODO how to know which declaration is impacting for the beta index?
             }
-            newExpression
-                    .append( usedDeclarations.iterator().next() )
-                    .append( " -> " )
-                    .append( right.getExpression() )
-                    .append( " " )
-            ;
+            LambdaExpr indexedBy_rightOperandExtractor = new LambdaExpr();
+            indexedBy_rightOperandExtractor.addParameter(new Parameter(new UnknownType(), usedDeclarations.iterator().next()));
+            indexedBy_rightOperandExtractor.setBody( new ExpressionStmt( right.getExpression() ) );
+            indexedByDSL.addArgument( indexedBy_rightOperandExtractor );
         } else {
             throw new UnsupportedOperationException( "TODO" ); // TODO
         }
-        newExpression.append( " )" );
         // -- END all indexing stuff --
-
 
         // -- all reactOn stuff --
         if ( !reactOnProperties.isEmpty() ) {
-            String reactOnCsv = Stream.concat( reactOnProperties.stream(),
-                                               Optional.ofNullable( pattern.getListenedProperties() ).map( Collection::stream ).orElseGet( Stream::empty ) )
-                                      .map( p -> new StringBuilder( "\"" ).append( p ).append( "\"" ).toString() )
-                                      .collect( Collectors.joining( ", " ) );
-            newExpression
-                    .append( "\n  .reactOn( " )
-                    .append( reactOnCsv )
-                    .append( " )" );
+            MethodCallExpr reactOnDSL = new MethodCallExpr(indexedByDSL, "reactOn");
+            Stream.concat( reactOnProperties.stream(),
+                           Optional.ofNullable( pattern.getListenedProperties() ).map( Collection::stream ).orElseGet( Stream::empty ) )
+                           .map( p -> new StringLiteralExpr( p ) )
+                           .forEach( reactOnDSL::addArgument );
+            
+            return reactOnDSL.toString();
         }
 
-        return newExpression.toString();
+        return indexedByDSL.toString();
     }
 
     /**
