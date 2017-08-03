@@ -24,18 +24,23 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import org.drools.core.RuleBaseConfiguration;
+import org.drools.core.base.ClassFieldAccessorCache;
 import org.drools.core.base.ClassObjectType;
+import org.drools.core.base.ClassTypeResolver;
+import org.drools.core.base.TypeResolver;
 import org.drools.core.base.extractors.ArrayElementReader;
 import org.drools.core.base.extractors.SelfReferenceClassFieldReader;
 import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.rule.Accumulate;
 import org.drools.core.rule.Declaration;
+import org.drools.core.rule.EntryPointId;
 import org.drools.core.rule.GroupElement;
 import org.drools.core.rule.MultiAccumulate;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.rule.SingleAccumulate;
+import org.drools.core.ruleunit.RuleUnitUtil;
 import org.drools.core.spi.Accumulator;
 import org.drools.core.spi.InternalReadAccessor;
 import org.drools.model.AccumulateFunction;
@@ -44,6 +49,7 @@ import org.drools.model.Condition;
 import org.drools.model.Consequence;
 import org.drools.model.Constraint;
 import org.drools.model.Model;
+import org.drools.model.OOPath;
 import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
@@ -56,6 +62,8 @@ import org.kie.api.KieBaseConfiguration;
 import org.kie.api.definition.KiePackage;
 
 import static org.drools.core.rule.Pattern.getReadAcessor;
+import static org.drools.model.DSL.type;
+import static org.drools.model.DSL.variableOf;
 import static org.drools.modelcompiler.ModelCompilerUtil.conditionToGroupElementType;
 
 public class KiePackagesBuilder {
@@ -72,27 +80,41 @@ public class KiePackagesBuilder {
 
     public void addModel( Model model ) {
         for (Rule rule : model.getRules()) {
-            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( rule.getPackge(), KnowledgePackageImpl::new );
-            pkg.addRule( compileRule( rule ) );
+            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( rule.getPackge(), this::createKiePackage );
+            pkg.addRule( compileRule( pkg, rule ) );
         }
+    }
+
+    private KnowledgePackageImpl createKiePackage(String name) {
+        KnowledgePackageImpl kpkg = new KnowledgePackageImpl( name );
+        kpkg.setClassFieldAccessorCache(new ClassFieldAccessorCache( configuration.getClassLoader() ) );
+        TypeResolver typeResolver = new ClassTypeResolver( new HashSet<String>( kpkg.getImports().keySet() ),
+                                                           configuration.getClassLoader(),
+                                                           name );
+        typeResolver.addImport( name + ".*" );
+        kpkg.setTypeResolver(typeResolver);
+        return kpkg;
     }
 
     public Collection<Class<?>> getPatternClasses() {
         return patternClasses;
     }
 
-    private RuleImpl compileRule( Rule rule ) {
+    private RuleImpl compileRule( KnowledgePackageImpl pkg, Rule rule ) {
         RuleImpl ruleImpl = new RuleImpl( rule.getName() );
         ruleImpl.setPackage( rule.getPackge() );
-        RuleContext ctx = new RuleContext();
-        populateLHS( ctx, ruleImpl.getLhs(), rule.getView() );
-        processConsequence( rule, ruleImpl, ctx );
+        if (rule.getUnit() != null) {
+            ruleImpl.setRuleUnitClassName( rule.getUnit() );
+            pkg.getRuleUnitRegistry().getRuleUnitFor( ruleImpl );
+        }
+        RuleContext ctx = new RuleContext( ruleImpl );
+        populateLHS( ctx, pkg, rule.getView() );
+        processConsequence( ctx, rule.getConsequence() );
         return ruleImpl;
     }
 
-    private void processConsequence( Rule rule, RuleImpl ruleImpl, RuleContext ctx ) {
-        Consequence consequence = rule.getConsequence();
-        ruleImpl.setConsequence( new LambdaConsequence( consequence, ctx ) );
+    private void processConsequence( RuleContext ctx, Consequence consequence ) {
+        ctx.getRule().setConsequence( new LambdaConsequence( consequence, ctx ) );
 
         Variable[] consequenceVars = consequence.getDeclarations();
         String[] requiredDeclarations = new String[consequenceVars.length];
@@ -100,11 +122,26 @@ public class KiePackagesBuilder {
             requiredDeclarations[i] = ctx.getPatternId( consequenceVars[i] );
         }
 
-        ruleImpl.setRequiredDeclarationsForConsequence( RuleImpl.DEFAULT_CONSEQUENCE_NAME, requiredDeclarations );
+        ctx.getRule().setRequiredDeclarationsForConsequence( RuleImpl.DEFAULT_CONSEQUENCE_NAME, requiredDeclarations );
     }
 
-    private void populateLHS( RuleContext ctx, GroupElement lhs, View view ) {
+    private void populateLHS( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
+        GroupElement lhs = ctx.getRule().getLhs();
+        if (ctx.getRule().getRuleUnitClassName() != null) {
+            lhs.addChild( addUnitPattern( ctx, pkg ) );
+        }
         view.getSubConditions().forEach( condition -> lhs.addChild( conditionToElement(ctx, condition) ) );
+    }
+
+    private Pattern addUnitPattern( RuleContext ctx, KnowledgePackageImpl pkg ) {
+        try {
+            Class<?> unitClass = pkg.getTypeResolver().resolveType( ctx.getRule().getRuleUnitClassName() );
+            Pattern unitPattern = addPatternForVariable( ctx, variableOf( type( unitClass ) ) );
+            unitPattern.setSource( new EntryPointId( RuleUnitUtil.RULE_UNIT_ENTRY_POINT ) );
+            return unitPattern;
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException( e );
+        }
     }
 
     private RuleConditionElement conditionToElement( RuleContext ctx, Condition condition ) {
@@ -124,6 +161,12 @@ public class KiePackagesBuilder {
                 Pattern source = buildPattern( ctx, condition );
                 Pattern pattern = new Pattern( 0, new ClassObjectType( Object.class ) );
                 pattern.setSource( buildAccumulate( ctx, (AccumulatePattern) condition, source, pattern ) );
+                return pattern;
+            }
+            case OOPATH: {
+                OOPath ooPath = (OOPath) condition;
+                Pattern pattern = buildPattern( ctx, ooPath.getFirstCondition() );
+                pattern.setSource( new EntryPointId( ctx.getRule().getRuleUnitClassName() + "." + ooPath.getSource().getName() ) );
                 return pattern;
             }
         }

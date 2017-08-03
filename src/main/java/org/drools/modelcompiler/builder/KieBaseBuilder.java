@@ -47,7 +47,7 @@ public class KieBaseBuilder {
 
         this.kBaseName = kBaseModel != null ? kBaseModel.getName() : "defaultkiebase";
         this.conf = conf;
-        this.builder = new KiePackagesBuilder( conf);
+        this.builder = new KiePackagesBuilder(conf);
     }
 
     public InternalKnowledgeBase createKieBase() {
