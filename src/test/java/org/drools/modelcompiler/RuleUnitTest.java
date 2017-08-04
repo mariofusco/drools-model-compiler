@@ -59,6 +59,36 @@ public class RuleUnitTest {
     }
 
     @Test
+    public void testRuleUnit() {
+        List<String> result = new ArrayList<>();
+
+        Variable<Person> adult = variableOf( type( Person.class ) );
+        Source<Person> persons = sourceOf( "persons", type( Person.class ) );
+
+        Rule rule = rule( "org.drools.retebuilder", "Adult" ).unit( AdultUnit.class )
+                     .view(
+                             from( persons ).filter( adult, p -> p.getAge() > 18 )
+                          )
+                     .then(on(adult).execute(p -> {
+                         System.out.println( p.getName() );
+                         result.add( p.getName() );
+                     }));
+
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+
+        RuleUnitExecutor executor = RuleUnitExecutor.create().bind( kieBase );
+
+        executor.newDataSource( "persons",
+                                new Person( "Mario", 43 ),
+                                new Person( "Marilena", 44 ),
+                                new Person( "Sofia", 5 ) );
+
+        executor.run( AdultUnit.class );
+
+        assertTrue( result.containsAll( asList("Mario", "Marilena") ) );
+    }
+
+    @Test
     public void testRuleUnitWithVarBinding() {
         Variable<AdultUnit> unit = variableOf( type( AdultUnit.class ) );
         Variable<Person> adult = variableOf( type( Person.class ) );
