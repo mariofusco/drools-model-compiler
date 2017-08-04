@@ -128,17 +128,26 @@ public class KiePackagesBuilder {
     private void populateLHS( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
         GroupElement lhs = ctx.getRule().getLhs();
         if (ctx.getRule().getRuleUnitClassName() != null) {
-            lhs.addChild( addUnitPattern( ctx, pkg ) );
+            lhs.addChild( addUnitPattern( ctx, pkg, view ) );
         }
         view.getSubConditions().forEach( condition -> lhs.addChild( conditionToElement(ctx, condition) ) );
     }
 
-    private Pattern addUnitPattern( RuleContext ctx, KnowledgePackageImpl pkg ) {
+    private Pattern addUnitPattern( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
+        Pattern unitPattern = addPatternForVariable( ctx, getUnitVariable( ctx, pkg, view ) );
+        unitPattern.setSource( new EntryPointId( RuleUnitUtil.RULE_UNIT_ENTRY_POINT ) );
+        return unitPattern;
+    }
+
+    private Variable getUnitVariable( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
+        String unitClassName = ctx.getRule().getRuleUnitClassName();
+        for (Variable<?> var : view.getBoundVariables()) {
+            if (var.getType().asClass().getName().equals( unitClassName )) {
+                return var;
+            }
+        }
         try {
-            Class<?> unitClass = pkg.getTypeResolver().resolveType( ctx.getRule().getRuleUnitClassName() );
-            Pattern unitPattern = addPatternForVariable( ctx, variableOf( type( unitClass ) ) );
-            unitPattern.setSource( new EntryPointId( RuleUnitUtil.RULE_UNIT_ENTRY_POINT ) );
-            return unitPattern;
+            return variableOf( type( pkg.getTypeResolver().resolveType( unitClassName ) ) );
         } catch (ClassNotFoundException e) {
             throw new RuntimeException( e );
         }

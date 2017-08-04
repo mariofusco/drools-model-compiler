@@ -35,6 +35,8 @@ import static org.junit.Assert.assertTrue;
 
 public class RuleUnitTest {
     public static class AdultUnit implements RuleUnit {
+        private List<String> result = new ArrayList<String>();
+        private int adultAge = 18;
         private DataSource<Person> persons;
 
         public AdultUnit( ) { }
@@ -46,22 +48,29 @@ public class RuleUnitTest {
         public DataSource<Person> getPersons() {
             return persons;
         }
+
+        public int getAdultAge() {
+            return adultAge;
+        }
+
+        public List<String> getResult() {
+            return result;
+        }
     }
 
     @Test
-    public void testRuleUnit() {
-        List<String> result = new ArrayList<String>();
-
+    public void testRuleUnitWithVarBinding() {
+        Variable<AdultUnit> unit = variableOf( type( AdultUnit.class ) );
         Variable<Person> adult = variableOf( type( Person.class ) );
         Source<Person> persons = sourceOf( "persons", type( Person.class ) );
 
         Rule rule = rule( "org.drools.retebuilder", "Adult" ).unit( AdultUnit.class )
                      .view(
-                             from( persons ).filter( adult, p -> p.getAge() > 18 )
+                             from( persons ).filter( adult, unit, (p, u) -> p.getAge() > u.getAdultAge() )
                           )
-                     .then(on(adult).execute(p -> {
+                     .then(on(adult, unit).execute((p, u) -> {
                          System.out.println( p.getName() );
-                         result.add( p.getName() );
+                         u.getResult().add( p.getName() );
                      }));
 
         KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
@@ -73,8 +82,9 @@ public class RuleUnitTest {
                                 new Person( "Marilena", 44 ),
                                 new Person( "Sofia", 5 ) );
 
-        executor.run( AdultUnit.class );
+        AdultUnit ruleUnit = new AdultUnit();
+        executor.run( ruleUnit );
 
-        assertTrue( result.containsAll( asList("Mario", "Marilena") ) );
+        assertTrue( ruleUnit.getResult().containsAll( asList("Mario", "Marilena") ) );
     }
 }
