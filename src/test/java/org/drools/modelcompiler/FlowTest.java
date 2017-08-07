@@ -17,15 +17,17 @@
 package org.drools.modelcompiler;
 
 import org.drools.model.Index.ConstraintType;
+import org.drools.model.Model;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
+import org.drools.model.impl.ModelImpl;
+import org.drools.model.Global;
 import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.junit.Test;
 import org.kie.api.KieBase;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.FactHandle;
 
-import static java.util.Arrays.asList;
 import static org.drools.model.DSL.*;
 import static org.drools.model.functions.accumulate.Average.avg;
 import static org.drools.model.functions.accumulate.Sum.sum;
@@ -34,8 +36,16 @@ import static org.junit.Assert.assertNull;
 
 public class FlowTest {
 
-    private static class Result {
-        Object value;
+    public static class Result {
+        private Object value;
+
+        public Object getValue() {
+            return value;
+        }
+
+        public void setValue( Object value ) {
+            this.value = value;
+        }
     }
 
     @Test
@@ -59,7 +69,8 @@ public class FlowTest {
                 .then(on(olderV, markV)
                             .execute((p1, p2) -> result.value = p1.getName() + " is older than " + p2.getName()));
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -102,7 +113,8 @@ public class FlowTest {
                 .then(on(nameV)
                             .execute(s -> result.value = s));
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -136,7 +148,8 @@ public class FlowTest {
                 .then(on(nameV)
                             .execute(s -> result.value = s));
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -162,7 +175,8 @@ public class FlowTest {
                 .then(on(oldestV)
                             .execute(p -> result.value = "Oldest person is " + p.getName()));
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -187,7 +201,8 @@ public class FlowTest {
                      )
                 .then( on(resultSum).execute(sum -> result.value = "total = " + sum) );
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -217,7 +232,8 @@ public class FlowTest {
                                 .execute((sum, avg) -> result.value = "total = " + sum + "; average = " + avg)
                      );
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         KieSession ksession = kieBase.newKieSession();
 
@@ -227,5 +243,75 @@ public class FlowTest {
 
         ksession.fireAllRules();
         assertEquals("total = 77; average = 38.5", result.value);
+    }
+
+    @Test
+    public void testGlobalInConsequence() {
+        Variable<Person> markV = variableOf( type( Person.class ) );
+        Global<Result> resultG = globalOf( type( Result.class ), "org.mypkg" );
+
+        Rule rule = rule( "org.mypkg", "global" )
+                .view(
+                        expr("exprA", markV, p -> p.getName().equals("Mark"))
+                                .indexedBy( String.class, ConstraintType.EQUAL, Person::getName, "Mark" )
+                                .reactOn( "name" )
+                     )
+                .then(on(markV, resultG)
+                              .execute((p, r) -> r.setValue( p.getName() + " is " + p.getAge() ) ) );
+
+        Model model = new ModelImpl().addRule( rule ).addGlobal( resultG );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        Result result = new Result();
+        ksession.setGlobal( resultG.getName(), result );
+
+        Person mark = new Person("Mark", 37);
+        Person edson = new Person("Edson", 35);
+        Person mario = new Person("Mario", 40);
+
+        FactHandle markFH = ksession.insert(mark);
+        FactHandle edsonFH = ksession.insert(edson);
+        FactHandle marioFH = ksession.insert(mario);
+
+        ksession.fireAllRules();
+        assertEquals("Mark is 37", result.value);
+    }
+
+    @Test
+    public void testGlobalInConstraint() {
+        Variable<Person> markV = variableOf( type( Person.class ) );
+        Global<Result> resultG = globalOf( type( Result.class ), "org.mypkg" );
+        Global<String> nameG = globalOf( type( String.class ), "org.mypkg" );
+
+        Rule rule = rule( "org.mypkg", "global" )
+                .view(
+                        expr("exprA", markV, nameG, (p, n) -> p.getName().equals(n))
+                                .reactOn( "name" )
+                     )
+                .then(on(markV, resultG)
+                              .execute((p, r) -> r.setValue( p.getName() + " is " + p.getAge() ) ) );
+
+        Model model = new ModelImpl().addRule( rule ).addGlobal( nameG ).addGlobal( resultG );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ksession.setGlobal( nameG.getName(), "Mark" );
+
+        Result result = new Result();
+        ksession.setGlobal( resultG.getName(), result );
+
+        Person mark = new Person("Mark", 37);
+        Person edson = new Person("Edson", 35);
+        Person mario = new Person("Mario", 40);
+
+        FactHandle markFH = ksession.insert(mark);
+        FactHandle edsonFH = ksession.insert(edson);
+        FactHandle marioFH = ksession.insert(mario);
+
+        ksession.fireAllRules();
+        assertEquals("Mark is 37", result.value);
     }
 }

@@ -88,7 +88,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public boolean isAllowed(InternalFactHandle handle, InternalWorkingMemory workingMemory) {
-        return evaluator.evaluate(handle);
+        return evaluator.evaluate(handle, workingMemory);
     }
 
     @Override

@@ -19,9 +19,11 @@ package org.drools.modelcompiler;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.drools.model.Model;
 import org.drools.model.Rule;
 import org.drools.model.Source;
 import org.drools.model.Variable;
+import org.drools.model.impl.ModelImpl;
 import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.junit.Test;
 import org.kie.api.KieBase;
@@ -74,7 +76,8 @@ public class RuleUnitTest {
                          result.add( p.getName() );
                      }));
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         RuleUnitExecutor executor = RuleUnitExecutor.create().bind( kieBase );
 
@@ -103,7 +106,8 @@ public class RuleUnitTest {
                          u.getResult().add( p.getName() );
                      }));
 
-        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( () -> asList( rule ) );
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
 
         RuleUnitExecutor executor = RuleUnitExecutor.create().bind( kieBase );
 

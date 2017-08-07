@@ -16,12 +16,12 @@
 
 package org.drools.modelcompiler;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.base.ClassFieldAccessorCache;
@@ -42,6 +42,7 @@ import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.rule.SingleAccumulate;
 import org.drools.core.ruleunit.RuleUnitUtil;
 import org.drools.core.spi.Accumulator;
+import org.drools.core.spi.GlobalExtractor;
 import org.drools.core.spi.InternalReadAccessor;
 import org.drools.model.AccumulateFunction;
 import org.drools.model.AccumulatePattern;
@@ -54,6 +55,7 @@ import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
 import org.drools.model.View;
+import org.drools.model.Global;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
 import org.drools.modelcompiler.constraints.LambdaAccumulator;
@@ -79,8 +81,12 @@ public class KiePackagesBuilder {
     }
 
     public void addModel( Model model ) {
+        for (Global global : model.getGlobals()) {
+            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( global.getPackage(), this::createKiePackage );
+            pkg.addGlobal( global.getName(), global.getType().asClass() );
+        }
         for (Rule rule : model.getRules()) {
-            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( rule.getPackge(), this::createKiePackage );
+            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( rule.getPackage(), this::createKiePackage );
             pkg.addRule( compileRule( pkg, rule ) );
         }
     }
@@ -88,7 +94,7 @@ public class KiePackagesBuilder {
     private KnowledgePackageImpl createKiePackage(String name) {
         KnowledgePackageImpl kpkg = new KnowledgePackageImpl( name );
         kpkg.setClassFieldAccessorCache(new ClassFieldAccessorCache( configuration.getClassLoader() ) );
-        TypeResolver typeResolver = new ClassTypeResolver( new HashSet<String>( kpkg.getImports().keySet() ),
+        TypeResolver typeResolver = new ClassTypeResolver( new HashSet<>( kpkg.getImports().keySet() ),
                                                            configuration.getClassLoader(),
                                                            name );
         typeResolver.addImport( name + ".*" );
@@ -102,7 +108,7 @@ public class KiePackagesBuilder {
 
     private RuleImpl compileRule( KnowledgePackageImpl pkg, Rule rule ) {
         RuleImpl ruleImpl = new RuleImpl( rule.getName() );
-        ruleImpl.setPackage( rule.getPackge() );
+        ruleImpl.setPackage( rule.getPackage() );
         if (rule.getUnit() != null) {
             ruleImpl.setRuleUnitClassName( rule.getUnit() );
             pkg.getRuleUnitRegistry().getRuleUnitFor( ruleImpl );
@@ -119,7 +125,7 @@ public class KiePackagesBuilder {
         Variable[] consequenceVars = consequence.getDeclarations();
         String[] requiredDeclarations = new String[consequenceVars.length];
         for (int i = 0; i < consequenceVars.length; i++) {
-            requiredDeclarations[i] = ctx.getPatternId( consequenceVars[i] );
+            requiredDeclarations[i] = consequenceVars[i].getName();
         }
 
         ctx.getRule().setRequiredDeclarationsForConsequence( RuleImpl.DEFAULT_CONSEQUENCE_NAME, requiredDeclarations );
@@ -193,7 +199,7 @@ public class KiePackagesBuilder {
         AccumulateFunction<?, ?, ?>[] accFunc = accPattern.getFunctions();
 
         if (accFunc.length == 1) {
-            pattern.addDeclaration( new Declaration(ctx.getPatternId( accPattern.getBoundVariables()[0] ),
+            pattern.addDeclaration( new Declaration(accPattern.getBoundVariables()[0].getName(),
                                                     getReadAcessor( new ClassObjectType( Object.class ) ),
                                                     pattern,
                                                     true) );
@@ -204,7 +210,7 @@ public class KiePackagesBuilder {
         Accumulator[] accumulators = new Accumulator[accFunc.length];
         for (int i = 0; i < accPattern.getFunctions().length; i++) {
             Variable accVar = accPattern.getBoundVariables()[i];
-            pattern.addDeclaration( new Declaration(ctx.getPatternId( accVar ),
+            pattern.addDeclaration( new Declaration(accVar.getName(),
                                                     new ArrayElementReader( reader, i, accVar.getType().asClass()),
                                                     pattern,
                                                     true) );
@@ -219,7 +225,7 @@ public class KiePackagesBuilder {
         Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
                                        0, // offset will be set by ReteooBuilder
                                        new ClassObjectType( patternClass ),
-                                       ctx.getPatternId( patternVariable ),
+                                       patternVariable.getName(),
                                        true );
         ctx.registerPattern( patternVariable, pattern );
         return pattern;
@@ -248,17 +254,24 @@ public class KiePackagesBuilder {
                 watchlist = new HashSet<>( );
                 pattern.setListenedProperties( watchlist );
             }
-            for (String field : fields) {
-                watchlist.add( field );
-            }
+            watchlist.addAll( Arrays.asList( fields ) );
         }
     }
 
     private Declaration[] getRequiredDeclaration( RuleContext ctx, SingleConstraint singleConstraint ) {
-        return Stream.of( singleConstraint.getVariables() )
-                     .map( ctx::getPattern )
-                     .map( Pattern::getDeclaration )
-                     .toArray( Declaration[]::new );
+        Variable[] vars = singleConstraint.getVariables();
+        Declaration[] declarations = new Declaration[vars.length];
+        for (int i = 0; i < vars.length; i++) {
+            if (vars[i].isFact()) {
+                declarations[i] = ctx.getPattern( vars[i] ).getDeclaration();
+            } else {
+                Global global = ( (Global) vars[i] );
+                ClassObjectType objectType = new ClassObjectType( global.getType().asClass() );
+                InternalReadAccessor globalExtractor = new GlobalExtractor( global.getName(), objectType);
+                declarations[i] = new Declaration( global.getName(), globalExtractor, new Pattern( 0, objectType ) );
+            }
+        }
+        return declarations;
     }
 
     public Collection<KiePackage> getKnowledgePackages() {

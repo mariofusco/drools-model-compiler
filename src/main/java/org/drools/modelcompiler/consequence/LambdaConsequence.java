@@ -17,7 +17,6 @@
 package org.drools.modelcompiler.consequence;
 
 import org.drools.core.WorkingMemory;
-import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.reteoo.RuleTerminalNode;
@@ -28,6 +27,7 @@ import org.drools.core.spi.Tuple;
 import org.drools.model.Drools;
 import org.drools.model.Variable;
 import org.drools.model.functions.FunctionN;
+import org.drools.model.Global;
 import org.drools.modelcompiler.RuleContext;
 
 public class LambdaConsequence implements Consequence {
@@ -47,13 +47,20 @@ public class LambdaConsequence implements Consequence {
 
     @Override
     public void evaluate( KnowledgeHelper knowledgeHelper, WorkingMemory workingMemory ) throws Exception {
+        Tuple tuple = knowledgeHelper.getTuple();
         Declaration[] declarations = ((RuleTerminalNode)knowledgeHelper.getMatch().getTuple().getTupleSink()).getRequiredDeclarations();
 
-        Tuple tuple = knowledgeHelper.getTuple();
-        Object[] facts = new Object[declarations.length];
-        for (int i = 0; i < declarations.length; i++) {
-            InternalFactHandle fh = tuple.get( declarations[i] );
-            facts[i] = declarations[i].getValue( (InternalWorkingMemory) workingMemory, fh.getObject() );
+        Variable[] vars = consequence.getVariables();
+        Object[] facts = new Object[vars.length];
+
+        int declrCounter = 0;
+        for (int i = 0; i < vars.length; i++) {
+            if ( vars[i].isFact() ) {
+                Declaration declaration = declarations[declrCounter++];
+                facts[i] = declaration.getValue( (InternalWorkingMemory) workingMemory, tuple.get( declaration ).getObject() );
+            } else {
+                facts[i] = workingMemory.getGlobal( ( (Global) vars[i] ).getName() );
+            }
         }
 
         consequence.getBlock().execute( facts );

@@ -27,13 +27,11 @@ public class RuleContext {
 
     private final RuleImpl rule;
 
-    private final Map<Variable, String> patternIds = new HashMap<>();
     private final Map<Variable, Pattern> patterns = new HashMap<>();
 
     private int patternIndex = -1;
-    private int variableIndex = -1;
 
-    public RuleContext( RuleImpl rule ) {
+    RuleContext( RuleImpl rule ) {
         this.rule = rule;
     }
 
@@ -41,19 +39,15 @@ public class RuleContext {
         return rule;
     }
 
-    public int getNextPatternIndex() {
+    int getNextPatternIndex() {
         return ++patternIndex;
     }
 
-    public String getPatternId( Variable patternVariable ) {
-        return patternIds.computeIfAbsent( patternVariable, v -> "$" + ++variableIndex );
-    }
-
-    public void registerPattern( Variable variable, Pattern pattern ) {
+    void registerPattern( Variable variable, Pattern pattern ) {
         patterns.put(variable, pattern);
     }
 
-    public Pattern getPattern(Variable variable) {
+    Pattern getPattern( Variable variable ) {
         return patterns.get( variable );
     }
 

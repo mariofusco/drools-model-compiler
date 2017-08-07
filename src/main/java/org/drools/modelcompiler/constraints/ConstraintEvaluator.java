@@ -3,6 +3,7 @@ package org.drools.modelcompiler.constraints;
 import java.util.stream.Stream;
 
 import org.drools.core.common.InternalFactHandle;
+import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.Pattern;
 import org.drools.core.spi.Tuple;
@@ -22,15 +23,27 @@ public class ConstraintEvaluator {
         this.pattern = pattern;
     }
 
-    public boolean evaluate( InternalFactHandle handle ) {
-        return constraint.getPredicate().test(handle.getObject());
+    public boolean evaluate( InternalFactHandle handle, InternalWorkingMemory workingMemory ) {
+        return constraint.getPredicate().test( declarations.length == 1 ?
+                                               new Object[] { handle.getObject() } :
+                                               getAlphaInvocationArgs( handle, workingMemory ) );
+    }
+
+    public Object[] getAlphaInvocationArgs( InternalFactHandle handle, InternalWorkingMemory workingMemory ) {
+        Object[] params = new Object[declarations.length];
+        for (int i = 0; i < params.length; i++) {
+            params[i] = pattern.getDeclaration().getIdentifier().equals( declarations[i].getIdentifier() ) ?
+                        handle.getObject() :
+                        declarations[1].getValue( workingMemory, null ) ;
+        }
+        return params;
     }
 
     public boolean evaluate(InternalFactHandle handle, Tuple tuple) {
-        return constraint.getPredicate().test(getInvocationArgs(handle, tuple));
+        return constraint.getPredicate().test( getBetaInvocationArgs( handle, tuple ) );
     }
 
-    private Object[] getInvocationArgs(InternalFactHandle handle, Tuple tuple) {
+    private Object[] getBetaInvocationArgs( InternalFactHandle handle, Tuple tuple ) {
         if (this.argsPos == null) {
             this.argsPos = Stream.of( declarations )
                                  .map( Declaration::getPattern )

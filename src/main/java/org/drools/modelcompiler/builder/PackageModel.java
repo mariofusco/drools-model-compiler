@@ -61,6 +61,11 @@ public class PackageModel {
                 "        return rules;\n" +
                 "    }\n" +
                 "\n" +
+                "    @Override\n" +
+                "    public List<Global> getGlobals() {\n" +
+                "        return Collections.emptyList();\n" +
+                "    }\n" +
+                "\n" +
                 "    List<Rule> rules = new ArrayList<>();\n" + 
                 "    {\n"+
                 "      ");
