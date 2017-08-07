@@ -271,9 +271,9 @@ public class FlowTest {
         Person edson = new Person("Edson", 35);
         Person mario = new Person("Mario", 40);
 
-        FactHandle markFH = ksession.insert(mark);
-        FactHandle edsonFH = ksession.insert(edson);
-        FactHandle marioFH = ksession.insert(mario);
+        ksession.insert(mark);
+        ksession.insert(edson);
+        ksession.insert(mario);
 
         ksession.fireAllRules();
         assertEquals("Mark is 37", result.value);
@@ -307,9 +307,9 @@ public class FlowTest {
         Person edson = new Person("Edson", 35);
         Person mario = new Person("Mario", 40);
 
-        FactHandle markFH = ksession.insert(mark);
-        FactHandle edsonFH = ksession.insert(edson);
-        FactHandle marioFH = ksession.insert(mario);
+        ksession.insert(mark);
+        ksession.insert(edson);
+        ksession.insert(mario);
 
         ksession.fireAllRules();
         assertEquals("Mark is 37", result.value);

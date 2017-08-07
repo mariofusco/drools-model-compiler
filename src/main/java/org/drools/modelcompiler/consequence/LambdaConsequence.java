@@ -27,7 +27,6 @@ import org.drools.core.spi.Tuple;
 import org.drools.model.Drools;
 import org.drools.model.Variable;
 import org.drools.model.functions.FunctionN;
-import org.drools.model.Global;
 import org.drools.modelcompiler.RuleContext;
 
 public class LambdaConsequence implements Consequence {
@@ -51,15 +50,24 @@ public class LambdaConsequence implements Consequence {
         Declaration[] declarations = ((RuleTerminalNode)knowledgeHelper.getMatch().getTuple().getTupleSink()).getRequiredDeclarations();
 
         Variable[] vars = consequence.getVariables();
-        Object[] facts = new Object[vars.length];
+        Object[] facts;
+
+        int factsOffset = 0;
+        if (consequence.isUsingDrools()) {
+            factsOffset++;
+            facts = new Object[vars.length + 1];
+            facts[0] = new DroolsImpl(knowledgeHelper);
+        } else {
+            facts = new Object[vars.length];
+        }
 
         int declrCounter = 0;
-        for (int i = 0; i < vars.length; i++) {
-            if ( vars[i].isFact() ) {
+        for (Variable var : vars) {
+            if ( var.isFact() ) {
                 Declaration declaration = declarations[declrCounter++];
-                facts[i] = declaration.getValue( (InternalWorkingMemory) workingMemory, tuple.get( declaration ).getObject() );
+                facts[factsOffset++] = declaration.getValue( (InternalWorkingMemory) workingMemory, tuple.get( declaration ).getObject() );
             } else {
-                facts[i] = workingMemory.getGlobal( ( (Global) vars[i] ).getName() );
+                facts[factsOffset++] = workingMemory.getGlobal( var.getName() );
             }
         }
 
@@ -87,7 +95,7 @@ public class LambdaConsequence implements Consequence {
     public static class DroolsImpl implements Drools {
         private final KnowledgeHelper knowledgeHelper;
 
-        public DroolsImpl(KnowledgeHelper knowledgeHelper) {
+        DroolsImpl(KnowledgeHelper knowledgeHelper) {
             this.knowledgeHelper = knowledgeHelper;
         }
 
