@@ -18,13 +18,23 @@ package org.drools.modelcompiler.builder;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
+
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.BodyDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.InitializerDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import org.drools.model.Model;
 
 public class PackageModel {
 
     private final String name;
 
-    private Map<String, String> ruleMethods = new HashMap<>();
+    private Map<String, MethodDeclaration> ruleMethods = new HashMap<>();
 
     public PackageModel( String name ) {
         this.name = name;
@@ -34,8 +44,8 @@ public class PackageModel {
         return name;
     }
     
-    public void putRuleMethod(String methodName, String methodSource) {
-        this.ruleMethods.put(methodName, methodSource);
+    public void putRuleMethod(String methodName, MethodDeclaration ruleMethod) {
+        this.ruleMethods.put(methodName, ruleMethod);
     }
 
     public String getVarsSource() {
@@ -45,39 +55,55 @@ public class PackageModel {
 
     public String getRulesSource() {
 //        if (true) return getRuleModelSource();
-        StringBuilder source = new StringBuilder();
-        source.append(
-                "package "+name+";\n" +
-                "\n" +
-                "import java.util.*;\n" +
-                "import org.drools.model.*;\n" +
-                "import static org.drools.model.DSL.*;\n" +
-                "import org.drools.model.Index.ConstraintType;\n" +
-                "\n" +
-                "public class Rules implements Model {\n" +
-                "\n" +
+
+        CompilationUnit cu = new CompilationUnit();
+        cu.setPackageDeclaration( name );
+
+        // fixed part
+        cu.addImport(JavaParser.parseImport("import java.util.*;"                          ));
+        cu.addImport(JavaParser.parseImport("import org.drools.model.*;"                   ));
+        cu.addImport(JavaParser.parseImport("import static org.drools.model.DSL.*;"        ));
+        cu.addImport(JavaParser.parseImport("import org.drools.model.Index.ConstraintType;"));
+        
+        ClassOrInterfaceDeclaration rulesClass = cu.addClass("Rules");
+        rulesClass.addImplementedType(Model.class);
+
+        BodyDeclaration<?> getRulesMethod = JavaParser.parseClassBodyDeclaration(
                 "    @Override\n" +
                 "    public List<Rule> getRules() {\n" +
                 "        return rules;\n" +
-                "    }\n" +
-                "\n" +
+                "    }\n"
+                );
+        rulesClass.addMember(getRulesMethod);
+        
+        BodyDeclaration<?> getGlobalsMethod = JavaParser.parseClassBodyDeclaration(
                 "    @Override\n" +
                 "    public List<Global> getGlobals() {\n" +
                 "        return Collections.emptyList();\n" +
-                "    }\n" +
-                "\n" +
-                "    List<Rule> rules = new ArrayList<>();\n" + 
-                "    {\n"+
-                "      ");
+                "    }\n");
+        rulesClass.addMember(getGlobalsMethod);
         
-        source.append(ruleMethods.keySet().stream().map(mn -> "rules.add( " + mn + "() );").collect(Collectors.joining(", ")));
-        source.append("\n    }\n");
+        BodyDeclaration<?> rulesList = JavaParser.parseClassBodyDeclaration("List<Rule> rules = new ArrayList<>();");
+        rulesClass.addMember(rulesList);
+        // end of fixed part
         
-        ruleMethods.values().forEach(source::append);
+        // instance initializer block.
+        // add to `rules` list the result of invoking each method for rule 
+        InitializerDeclaration rulesListInitializer = new InitializerDeclaration();
+        rulesClass.addMember(rulesListInitializer);
+        BlockStmt rulesListInitializerBody = new BlockStmt();
+        rulesListInitializer.setBody(rulesListInitializerBody);
+        for ( String methodName : ruleMethods.keySet() ) {
+            NameExpr rulesFieldName = new NameExpr( "rules" );
+            MethodCallExpr add = new MethodCallExpr(rulesFieldName, "add");
+            add.addArgument( new MethodCallExpr(null, methodName) );
+            rulesListInitializerBody.addStatement( add );
+        }
         
-        source.append("\n}\n");
+        // each method per Drlx parser result
+        ruleMethods.values().forEach( rulesClass::addMember );
         
-        return source.toString();
+        return cu.toString();
     }
 
     public void print() {

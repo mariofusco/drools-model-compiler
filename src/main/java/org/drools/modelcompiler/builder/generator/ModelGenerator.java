@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.github.javaparser.JavaParser;
@@ -138,40 +137,8 @@ public class ModelGenerator {
             
             ruleBlock.addStatement( new ReturnStmt("rule") );
             System.out.println(ruleMethod);
-            packageModel.putRuleMethod("rule_" + rule.getId(), ruleMethod.toString());
+            packageModel.putRuleMethod("rule_" + rule.getId(), ruleMethod);
             
-            // -- OLD --
-            StringBuilder source = new StringBuilder();
-            
-            source.append("private Rule rule_" + rule.getId() + "() {\n");
-            
-            context.declarations.entrySet().stream()
-                .map(kv -> "  final Variable<"+kv.getValue().getCanonicalName()+"> var_"+kv.getKey()+" = variableOf( type( "+kv.getValue().getCanonicalName()+".class ) );\n")
-                .forEach(source::append);
-            
-            source.append(   "  Rule rule = rule( \"" + rule.getName() + "\" )\n" +
-               "  .view(\n\n");
-            
-            source.append( context.expressions.stream().map(Expression::toString).collect(Collectors.joining(",\n")) );
-            
-            source.append("\n\n  )\n");
-            source.append("  .then(c -> c.on(");
-            source.append( context.declarations.keySet().stream().map(x->"var_"+x).collect(Collectors.joining(", ")) );
-            source.append(")\n");
-            
-            source.append("              .execute( (");
-            source.append( context.declarations.keySet().stream().collect(Collectors.joining(", ")) );
-            source.append(") -> {\n\n");
-
-            source.append( r.getDescr().getConsequence().toString().trim() );
-            
-            source.append("\n\n})\n");
-            
-            source.append("  );\n");
-            
-            source.append("  return rule;\n}\n");
-            System.out.println(source);
-            // -- /OLD --
         }
         packageModel.print();
         return packageModel;
