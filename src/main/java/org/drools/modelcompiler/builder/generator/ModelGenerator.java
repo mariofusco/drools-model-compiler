@@ -18,16 +18,22 @@ package org.drools.modelcompiler.builder.generator;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ast.Modifier;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.expr.ClassExpr;
@@ -38,7 +44,10 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.UnknownType;
 import org.drools.compiler.compiler.DrlExprParser;
@@ -56,6 +65,8 @@ import org.drools.core.spi.Constraint;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.drools.drlx.DrlxParser;
+import org.drools.model.Rule;
+import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
@@ -70,6 +81,66 @@ public class ModelGenerator {
             GroupElement lhs = ( (RuleImpl) rule ).getLhs();
             visit(context, lhs);
             
+            MethodDeclaration ruleMethod = new MethodDeclaration();
+            ruleMethod.setModifiers(EnumSet.of(Modifier.PRIVATE));
+            ClassOrInterfaceType ruleType = JavaParser.parseClassOrInterfaceType(Rule.class.getCanonicalName());
+            ruleMethod.setType(ruleType);
+            ruleMethod.setName(new StringBuilder("rule_").append(rule.getId()).toString());
+            BlockStmt ruleBlock = new BlockStmt();
+            ruleMethod.setBody(ruleBlock);
+            for ( Entry<String, Class<?>> decl : context.declarations.entrySet() ) {
+                ClassOrInterfaceType var_type = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
+                ClassOrInterfaceType declType = JavaParser.parseClassOrInterfaceType( decl.getValue().getCanonicalName() );
+                
+                var_type.setTypeArguments(declType);
+                VariableDeclarationExpr var_ = new VariableDeclarationExpr(var_type,
+                                                                           new StringBuilder("var_").append(decl.getKey()).toString(),
+                                                                           Modifier.FINAL);
+                
+                
+                MethodCallExpr variableOfCall = new MethodCallExpr(null, "variableOf");
+                MethodCallExpr typeCall = new MethodCallExpr(null, "type");
+                typeCall.addArgument( new ClassExpr( declType ));
+                variableOfCall.addArgument(typeCall);
+                
+                AssignExpr var_assign = new AssignExpr(var_, variableOfCall, AssignExpr.Operator.ASSIGN);
+                ruleBlock.addStatement(var_assign);
+            }
+            VariableDeclarationExpr ruleVar = new VariableDeclarationExpr(ruleType, "rule");
+            
+            MethodCallExpr ruleCall = new MethodCallExpr(null, "rule");
+            ruleCall.addArgument( new StringLiteralExpr( rule.getName() ) );
+             
+            MethodCallExpr viewCall = new MethodCallExpr(ruleCall, "view");
+            context.expressions.stream().forEach(viewCall::addArgument);
+            
+            MethodCallExpr thenCall = new MethodCallExpr(viewCall, "then");
+            LambdaExpr thenLambda = new LambdaExpr();
+            thenCall.addArgument(thenLambda);
+            thenLambda.addParameter(new Parameter(new UnknownType(), "c"));
+            NameExpr cNameExpr = new NameExpr("c");
+            MethodCallExpr onCall = new MethodCallExpr(cNameExpr, "on");
+            context.declarations.entrySet().stream().map(d -> new StringBuilder("var_").append(d.getKey()).toString()).forEach(onCall::addArgument);
+            
+            MethodCallExpr executeCall = new MethodCallExpr(onCall, "execute");
+            LambdaExpr executeLambda = new LambdaExpr();
+            executeCall.addArgument(executeLambda);
+            executeLambda.setEnclosingParameters(true);
+            context.declarations.keySet().stream().map(x -> new Parameter(new UnknownType(), x)).forEach(executeLambda::addParameter);
+            String ruleConsequenceAsBlock = new StringBuilder("{").append(r.getDescr().getConsequence().toString().trim()).append("}").toString();
+            executeLambda.setBody( JavaParser.parseBlock( ruleConsequenceAsBlock ) );
+            
+            Expression thenLambdaExpr = executeCall;
+            thenLambda.setBody( new ExpressionStmt( thenLambdaExpr ) );
+            
+            AssignExpr ruleAssign = new AssignExpr(ruleVar, thenCall, AssignExpr.Operator.ASSIGN);
+            ruleBlock.addStatement(ruleAssign);
+            
+            ruleBlock.addStatement( new ReturnStmt("rule") );
+            System.out.println(ruleMethod);
+            packageModel.putRuleMethod("rule_" + rule.getId(), ruleMethod.toString());
+            
+            // -- OLD --
             StringBuilder source = new StringBuilder();
             
             source.append("private Rule rule_" + rule.getId() + "() {\n");
@@ -81,7 +152,7 @@ public class ModelGenerator {
             source.append(   "  Rule rule = rule( \"" + rule.getName() + "\" )\n" +
                "  .view(\n\n");
             
-            source.append( context.expressions.stream().collect(Collectors.joining(",\n")) );
+            source.append( context.expressions.stream().map(Expression::toString).collect(Collectors.joining(",\n")) );
             
             source.append("\n\n  )\n");
             source.append("  .then(c -> c.on(");
@@ -99,9 +170,8 @@ public class ModelGenerator {
             source.append("  );\n");
             
             source.append("  return rule;\n}\n");
-            
-            packageModel.putRuleMethod("rule_" + rule.getId(), source.toString());
-            
+            System.out.println(source);
+            // -- /OLD --
         }
         packageModel.print();
         return packageModel;
@@ -134,14 +204,14 @@ public class ModelGenerator {
         for (Constraint constraint : pattern.getConstraints()) {
             String expression = ((MvelConstraint)constraint).getExpression();
 //            String dslExpr = mvelParse(context, pattern, constraint, expression);
-            String dslExpr = drlxParse(context, pattern, constraint, expression);
+            Expression dslExpr = drlxParse(context, pattern, constraint, expression);
 
             System.out.println("Adding newExpression: "+dslExpr);
             context.expressions.add( dslExpr );
         }
     }
 
-    private static String drlxParse(RuleContext context, Pattern pattern, Constraint constraint, String expression) {
+    private static Expression drlxParse(RuleContext context, Pattern pattern, Constraint constraint, String expression) {
         Expression drlxExpr = DrlxParser.parseExpression( expression );
 
         if ( !(drlxExpr instanceof BinaryExpr) ) {
@@ -177,7 +247,7 @@ public class ModelGenerator {
         return buildDslExpression( pattern, constraint, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo );
     }
 
-    private static String mvelParse(RuleContext context, Pattern pattern, Constraint constraint, String expression) {
+    private static Expression mvelParse(RuleContext context, Pattern pattern, Constraint constraint, String expression) {
         DrlExprParser drlExprParser = new DrlExprParser( LanguageLevelOption.DRL6_STRICT );
         ConstraintConnectiveDescr result = drlExprParser.parse( expression );
         if ( result.getDescrs().size() != 1 ) {
@@ -213,7 +283,7 @@ public class ModelGenerator {
         return buildDslExpression( pattern, constraint, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ) );
     }
 
-    private static String buildDslExpression( Pattern pattern, Constraint constraint, ConstraintType decodeConstraintType,
+    private static Expression buildDslExpression( Pattern pattern, Constraint constraint, ConstraintType decodeConstraintType,
                                               Set<String> usedDeclarations, Set<String> reactOnProperties,
                                               IndexedExpression left, IndexedExpression right, Expression combo ) {
         
@@ -268,10 +338,10 @@ public class ModelGenerator {
                            .map( p -> new StringLiteralExpr( p ) )
                            .forEach( reactOnDSL::addArgument );
             
-            return reactOnDSL.toString();
+            return reactOnDSL;
         }
 
-        return indexedByDSL.toString();
+        return indexedByDSL;
     }
 
     /**
@@ -286,6 +356,6 @@ public class ModelGenerator {
 
     public static class RuleContext {
         Map<String, Class<?>> declarations = new HashMap<>();
-        List<String> expressions = new ArrayList<>();
+        List<Expression> expressions = new ArrayList<>();
     }
 }
