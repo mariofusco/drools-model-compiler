@@ -28,8 +28,6 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
-import org.drools.core.base.ClassObjectType;
-import org.drools.core.rule.Pattern;
 import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
@@ -55,10 +53,10 @@ public class DrlxParseUtil {
         throw new UnsupportedOperationException( "Unknown operator " + operator );
     }
 
-    public static IndexedExpression toTypedExpression( RuleContext context, Pattern pattern, Expression drlxExpr,
+    public static IndexedExpression toTypedExpression( RuleContext context, Class<?> patternType, Expression drlxExpr,
                                                      Set<String> usedDeclarations, Set<String> reactOnProperties ) {
         
-        Class<?> typeCursor = ( (ClassObjectType) pattern.getObjectType() ).getClassType();
+        Class<?> typeCursor = patternType;
         
         if ( drlxExpr instanceof LiteralExpr ) {
             return new IndexedExpression( drlxExpr , Optional.empty());
