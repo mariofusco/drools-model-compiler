@@ -16,8 +16,6 @@
 
 package org.drools.modelcompiler;
 
-import static org.junit.Assert.fail;
-
 import java.util.List;
 
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
@@ -29,6 +27,8 @@ import org.kie.api.builder.KieBuilder;
 import org.kie.api.builder.KieFileSystem;
 import org.kie.api.builder.Message;
 import org.kie.api.runtime.KieSession;
+
+import static org.junit.Assert.fail;
 
 public class CompilerTest {
 
@@ -96,7 +96,7 @@ public class CompilerTest {
     }
 
     private KieSession getKieSession(String str) {
-        return getKieSession( str, true );
+        return getKieSession( str, false );
     }
 
     private KieSession getKieSession(String str, boolean useCanonicalModel) {
