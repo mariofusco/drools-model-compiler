@@ -16,17 +16,22 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import java.util.ArrayList;
+import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
+
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.github.javaparser.JavaParser;
@@ -55,16 +60,12 @@ import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
 import org.drools.compiler.lang.descr.BaseDescr;
 import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
+import org.drools.compiler.lang.descr.OrDescr;
 import org.drools.compiler.lang.descr.PatternDescr;
 import org.drools.compiler.lang.descr.RelationalExprDescr;
 import org.drools.compiler.lang.descr.RuleDescr;
-import org.drools.core.base.ClassObjectType;
 import org.drools.core.definitions.InternalKnowledgePackage;
-import org.drools.core.rule.GroupElement;
 import org.drools.core.rule.Pattern;
-import org.drools.core.rule.RuleConditionElement;
-import org.drools.core.rule.constraint.MvelConstraint;
-import org.drools.core.spi.Constraint;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.drools.drlx.DrlxParser;
@@ -73,8 +74,6 @@ import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
-
-import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
 public class ModelGenerator {
 
@@ -120,7 +119,7 @@ public class ModelGenerator {
             ruleCall.addArgument( new StringLiteralExpr( ruleDescr.getName() ) );
              
             MethodCallExpr viewCall = new MethodCallExpr(ruleCall, "view");
-            context.expressions.forEach( viewCall::addArgument );
+            viewCall.addArgument(context.expression);
             
             MethodCallExpr thenCall = new MethodCallExpr(viewCall, "then");
             LambdaExpr thenLambda = new LambdaExpr();
@@ -134,9 +133,12 @@ public class ModelGenerator {
             LambdaExpr executeLambda = new LambdaExpr();
             executeCall.addArgument(executeLambda);
             executeLambda.setEnclosingParameters(true);
-            context.declarations.keySet().stream().map(x -> new Parameter(new UnknownType(), x)).forEach(executeLambda::addParameter);
             String ruleConsequenceAsBlock = "{" + ruleDescr.getConsequence().toString().trim() + "}";
-            executeLambda.setBody( JavaParser.parseBlock( ruleConsequenceAsBlock ) );
+            BlockStmt ruleConsequence = JavaParser.parseBlock( ruleConsequenceAsBlock );
+            List<String> declUsedInRHS = ruleConsequence.getChildNodesByType(NameExpr.class).stream().map(NameExpr::getNameAsString).collect(Collectors.toList());
+            Stream<Parameter> verifiedDeclUsedInRHS = context.declarations.keySet().stream().filter(declUsedInRHS::contains).map(x -> new Parameter(new UnknownType(), x));
+            verifiedDeclUsedInRHS.forEach(executeLambda::addParameter);    
+            executeLambda.setBody( ruleConsequence );
 
             thenLambda.setBody( new ExpressionStmt( executeCall ) );
             
@@ -155,6 +157,8 @@ public class ModelGenerator {
     private static void visit( RuleContext context, BaseDescr descr ) {
         if ( descr instanceof AndDescr ) {
             visit( context, ( (AndDescr) descr ));
+        } else if ( descr instanceof OrDescr ) {
+            visit( context, ( (OrDescr) descr ));
         } else if ( descr instanceof PatternDescr ) {
             visit( context, ( (PatternDescr) descr ));
         } else {
@@ -163,9 +167,23 @@ public class ModelGenerator {
     }
 
     private static void visit( RuleContext context, AndDescr descr ) {
+        final MethodCallExpr andDSL = new MethodCallExpr(null, "and");
+        context.addExpression(andDSL);
+        context.pushExprPointer( e -> andDSL.addArgument( e ));
         for (BaseDescr subDescr : descr.getDescrs()) {
             visit( context, subDescr );
         }
+        context.popExprPointer();
+    }
+    
+    private static void visit( RuleContext context, OrDescr descr ) {
+        final MethodCallExpr orDSL = new MethodCallExpr(null, "or");
+        context.addExpression(orDSL);
+        context.pushExprPointer( e -> orDSL.addArgument( e ));
+        for (BaseDescr subDescr : descr.getDescrs()) {
+            visit( context, subDescr );
+        }
+        context.popExprPointer();
     }
 
     private static void visit(RuleContext context, PatternDescr pattern ) {
@@ -185,41 +203,7 @@ public class ModelGenerator {
             Expression dslExpr = drlxParse(context, patternType, pattern.getIdentifier(), expression);
 
             System.out.println("Adding newExpression: "+dslExpr);
-            context.expressions.add( dslExpr );
-        }
-    }
-
-    private static void visit( RuleContext context, GroupElement element ) {
-        switch (element.getType()) {
-            case AND:
-                element.getChildren().forEach( elem -> visit(context, elem) );
-                break;
-            default:
-                throw new UnsupportedOperationException("TODO"); // TODO
-        }
-    }
-
-    private static void visit(RuleContext context, RuleConditionElement conditionElement) {
-        if (conditionElement instanceof Pattern) {
-            visit( context, (Pattern) conditionElement );
-        } else {
-            throw new UnsupportedOperationException("TODO"); // TODO
-        }
-    }
-
-    private static void visit(RuleContext context, Pattern pattern) {
-        System.out.println(pattern);
-        Class<?> patternType = ( (ClassObjectType) pattern.getObjectType() ).getClassType();
-        if (pattern.getDeclaration() != null) {
-            context.declarations.put( pattern.getDeclaration().getBindingName(), patternType );
-        }
-        for (Constraint constraint : pattern.getConstraints()) {
-            String expression = ((MvelConstraint)constraint).getExpression();
-//            String dslExpr = mvelParse(context, pattern, constraint, expression);
-            Expression dslExpr = drlxParse(context, patternType, pattern.getDeclaration().getBindingName(), expression);
-
-            System.out.println("Adding newExpression: "+dslExpr);
-            context.expressions.add( dslExpr );
+            context.addExpression( dslExpr );
         }
     }
 
@@ -371,6 +355,21 @@ public class ModelGenerator {
         }
 
         Map<String, Class<?>> declarations = new HashMap<>();
-        List<Expression> expressions = new ArrayList<>();
+        
+        Expression expression = null;
+        Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
+        {
+            exprPointer.push( init -> this.expression = init );
+        }
+        
+        public void addExpression(Expression e) {
+            exprPointer.peek().accept(e);
+        }
+        public void pushExprPointer(Consumer<Expression> p) {
+            exprPointer.push(p);
+        }
+        public Consumer<Expression> popExprPointer() {
+            return exprPointer.pop();
+        }
     }
 }

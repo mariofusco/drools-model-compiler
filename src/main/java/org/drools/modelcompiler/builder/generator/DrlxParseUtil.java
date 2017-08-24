@@ -28,6 +28,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.ThisExpr;
 import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
@@ -60,6 +61,8 @@ public class DrlxParseUtil {
         
         if ( drlxExpr instanceof LiteralExpr ) {
             return new IndexedExpression( drlxExpr , Optional.empty());
+        } else if ( drlxExpr instanceof ThisExpr ) {
+            return new IndexedExpression( new NameExpr("_this") , Optional.empty());
         } else if ( drlxExpr instanceof NameExpr ) {
             String name = drlxExpr.toString();
             reactOnProperties.add(name);
@@ -76,13 +79,19 @@ public class DrlxParseUtil {
             List<Node> subList = drlxExpr.getChildNodes().subList(1, drlxExpr.getChildNodes().size());
             if ( context.declarations.containsKey(node0.toString()) ) {
                 usedDeclarations.add( node0.toString() );
+                typeCursor = context.declarations.get(node0.toString());
             } else {
                 throw new UnsupportedOperationException("referring to a declaration I don't know about");
                 // TODO would it be fine to assume is a global if it's not in the declarations?
             }
-            reactOnProperties.add( firstProperty.toString() );
-            
-            Expression previous = new NameExpr(node0.toString());
+
+            Expression previous = null;
+            if (node0 instanceof NameExpr) {
+                reactOnProperties.add( firstProperty.toString() );
+                previous = new NameExpr(node0.toString());
+            } else {
+                throw new RuntimeException("TODO");  // TODO process inlinecast.
+            }
             for ( Node part : subList ) {
                 Method accessor = ClassUtils.getAccessor( typeCursor, part.toString() );
                 typeCursor = accessor.getReturnType();
