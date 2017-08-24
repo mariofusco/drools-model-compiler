@@ -20,7 +20,6 @@ import java.util.List;
 
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
 import org.drools.modelcompiler.builder.CanonicalModelKieProject;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
@@ -113,7 +112,7 @@ public class CompilerTest {
     }
 
     @Test
-    @Ignore("TODO: implement parsing of non Java expression in drlx parser")
+//    @Ignore("TODO: implement parsing of non Java expression in drlx parser")
     public void testInlineCast() {
         String str =
                 "import " + Person.class.getCanonicalName() + ";" +

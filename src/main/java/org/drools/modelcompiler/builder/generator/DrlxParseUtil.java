@@ -22,13 +22,19 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.drlx.expr.InlineCastExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
+import com.github.javaparser.ast.expr.CastExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.ReferenceType;
 import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
@@ -74,31 +80,59 @@ public class DrlxParseUtil {
             
             return new IndexedExpression( body, Optional.of( accessorReturnType ));
         } else if ( drlxExpr instanceof FieldAccessExpr ) {
-            Node node0 = drlxExpr.getChildNodes().get(0);
-            Node firstProperty = drlxExpr.getChildNodes().get(1);
-            List<Node> subList = drlxExpr.getChildNodes().subList(1, drlxExpr.getChildNodes().size());
-            if ( context.declarations.containsKey(node0.toString()) ) {
-                usedDeclarations.add( node0.toString() );
-                typeCursor = context.declarations.get(node0.toString());
-            } else {
-                throw new UnsupportedOperationException("referring to a declaration I don't know about");
-                // TODO would it be fine to assume is a global if it's not in the declarations?
+            List<Node> childNodes = drlxExpr.getChildNodes();
+            Node firstNode = childNodes.get(0);
+
+            boolean isInLineCast = firstNode instanceof InlineCastExpr;
+            if (isInLineCast) {
+                InlineCastExpr inlineCast = (InlineCastExpr) firstNode;
+                try {
+                    typeCursor = context.getPkg().getTypeResolver().resolveType( inlineCast.getType().toString() );
+                } catch (ClassNotFoundException e) {
+                    throw new RuntimeException( e );
+                }
+                firstNode = inlineCast.getExpression();
+
             }
 
             Expression previous = null;
-            if (node0 instanceof NameExpr) {
-                reactOnProperties.add( firstProperty.toString() );
-                previous = new NameExpr(node0.toString());
+            if (firstNode instanceof NameExpr) {
+                String firstName = ( (NameExpr) firstNode ).getName().getIdentifier();
+                if ( context.declarations.containsKey( firstName ) ) {
+                    usedDeclarations.add( firstName );
+                    if (!isInLineCast) {
+                        typeCursor = context.declarations.get( firstName );
+                    }
+                    previous = new NameExpr( firstName );
+                    childNodes = drlxExpr.getChildNodes().subList( 1, drlxExpr.getChildNodes().size() );
+                }
+            } else if (firstNode instanceof ThisExpr) {
+                childNodes = drlxExpr.getChildNodes().subList( 1, drlxExpr.getChildNodes().size() );
+                previous = new NameExpr( "_this" );
             } else {
-                throw new RuntimeException("TODO");  // TODO process inlinecast.
+                throw new UnsupportedOperationException( "Unknown node: " + firstNode );
             }
-            for ( Node part : subList ) {
-                Method accessor = ClassUtils.getAccessor( typeCursor, part.toString() );
+
+            reactOnProperties.add( childNodes.get(0).toString() );
+
+            IndexedExpression indexedExpression = new IndexedExpression();
+            if (isInLineCast) {
+                ReferenceType castType = new ClassOrInterfaceType( typeCursor.getName() );
+                indexedExpression.setPrefixExpression( new InstanceOfExpr( previous, castType ) );
+                previous = new EnclosedExpr( new CastExpr( castType, previous ) );
+            }
+
+            for ( Node part : childNodes ) {
+                String field = part.toString();
+                Method accessor = ClassUtils.getAccessor( typeCursor, field );
+                if (accessor == null) {
+                    throw new IllegalStateException( "Unknown field '" + field + "' on type " + typeCursor );
+                }
                 typeCursor = accessor.getReturnType();
                 previous = new MethodCallExpr( previous, accessor.getName() );
             }
-            
-            return new IndexedExpression( previous, Optional.of( typeCursor ));
+
+            return indexedExpression.setExpression( previous ).setIndexType( Optional.of( typeCursor ) );
         } else {
             // TODO the below should not be needed anymore...
             drlxExpr.getChildNodes();

@@ -16,8 +16,6 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -74,6 +72,8 @@ import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
+
+import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
 public class ModelGenerator {
 
@@ -240,6 +240,10 @@ public class ModelGenerator {
                 combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
         }
 
+        if (left.getPrefixExpression() != null) {
+            combo = new BinaryExpr( left.getPrefixExpression(), combo, Operator.AND );
+        }
+
         return buildDslExpression( Collections.emptyList(), bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo );
     }
 
@@ -323,6 +327,8 @@ public class ModelGenerator {
         }
         // -- END all indexing stuff --
 
+        Expression result = indexedByDSL;
+
         // -- all reactOn stuff --
         if ( !reactOnProperties.isEmpty() ) {
             MethodCallExpr reactOnDSL = new MethodCallExpr(indexedByDSL, "reactOn");
@@ -330,11 +336,11 @@ public class ModelGenerator {
                            Optional.ofNullable( listenedProperties ).map( Collection::stream ).orElseGet( Stream::empty ) )
                            .map( StringLiteralExpr::new )
                            .forEach( reactOnDSL::addArgument );
-            
-            return reactOnDSL;
+
+            result = reactOnDSL;
         }
 
-        return indexedByDSL;
+        return result;
     }
 
     /**
@@ -370,6 +376,10 @@ public class ModelGenerator {
         }
         public Consumer<Expression> popExprPointer() {
             return exprPointer.pop();
+        }
+
+        public InternalKnowledgePackage getPkg() {
+            return pkg;
         }
     }
 }

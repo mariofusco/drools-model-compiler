@@ -22,9 +22,12 @@ import com.github.javaparser.ast.expr.Expression;
 
 public class IndexedExpression {
 
-    private final Expression expression;
-    private final String removeMe;
-    private final Optional<Class<?>> indexType;
+    private Expression expression;
+    private String removeMe;
+    private Optional<Class<?>> indexType;
+    private Expression prefixExpression;
+
+    public IndexedExpression( ) { }
 
     public IndexedExpression( Expression expression, Optional<Class<?>> indexType ) {
         this.expression = expression;
@@ -40,6 +43,25 @@ public class IndexedExpression {
     
     public Expression getExpression() {
         return expression;
+    }
+
+    public IndexedExpression setExpression( Expression expression ) {
+        this.expression = expression;
+        return this;
+    }
+
+    public IndexedExpression setIndexType( Optional<Class<?>> indexType ) {
+        this.indexType = indexType;
+        return this;
+    }
+
+    public Expression getPrefixExpression() {
+        return prefixExpression;
+    }
+
+    public IndexedExpression setPrefixExpression( Expression prefixExpression ) {
+        this.prefixExpression = prefixExpression;
+        return this;
     }
 
     public String getExpressionAsString() {
