@@ -300,32 +300,35 @@ public class ModelGenerator {
         
         
         // -- all indexing stuff --
-        Class<?> indexType = Stream.of( left, right ).map( IndexedExpression::getIndexType )
-                                   .flatMap( x -> optToStream( x ) )
-                                   .findFirst().get();
-        
-        ClassExpr indexedBy_indexedClass = new ClassExpr( new ClassOrInterfaceType( indexType.getCanonicalName() ) );
-        FieldAccessExpr indexedBy_constraintType = new FieldAccessExpr( new NameExpr( "org.drools.model.Index.ConstraintType" ), decodeConstraintType.toString()); // not 100% accurate as the type in "nameExpr" is actually parsed if it was JavaParsers as a big chain of FieldAccessExpr
-        LambdaExpr indexedBy_leftOperandExtractor = new LambdaExpr();
-        indexedBy_leftOperandExtractor.addParameter(new Parameter(new UnknownType(), "_this"));
-        indexedBy_leftOperandExtractor.setBody( new ExpressionStmt( left.getExpression() ) );
-
-        MethodCallExpr indexedByDSL = new MethodCallExpr(exprDSL, "indexedBy");
-        indexedByDSL.addArgument( indexedBy_indexedClass );
-        indexedByDSL.addArgument( indexedBy_constraintType );
-        indexedByDSL.addArgument( indexedBy_leftOperandExtractor );
-        if ( usedDeclarations.isEmpty() ) {
-            Expression indexedBy_rightValue = right.getExpression();
-            indexedByDSL.addArgument( indexedBy_rightValue );
-        } else if ( usedDeclarations.size() == 1 ) {
-            LambdaExpr indexedBy_rightOperandExtractor = new LambdaExpr();
-            indexedBy_rightOperandExtractor.addParameter(new Parameter(new UnknownType(), usedDeclarations.iterator().next()));
-            indexedBy_rightOperandExtractor.setBody( new ExpressionStmt( right.getExpression() ) );
-            indexedByDSL.addArgument( indexedBy_rightOperandExtractor );
-        } else {
-            throw new UnsupportedOperationException( "TODO" ); // TODO: possibly not to be indexed
+        // .indexBy(..) is only added if left is not an identity expression:
+        if ( !(left.getExpression() instanceof NameExpr && ((NameExpr)left.getExpression()).getName().getIdentifier().equals("_this")) ) {
+            Class<?> indexType = Stream.of( left, right ).map( IndexedExpression::getIndexType )
+                                       .flatMap( x -> optToStream( x ) )
+                                       .findFirst().get();
+            
+            ClassExpr indexedBy_indexedClass = new ClassExpr( new ClassOrInterfaceType( indexType.getCanonicalName() ) );
+            FieldAccessExpr indexedBy_constraintType = new FieldAccessExpr( new NameExpr( "org.drools.model.Index.ConstraintType" ), decodeConstraintType.toString()); // not 100% accurate as the type in "nameExpr" is actually parsed if it was JavaParsers as a big chain of FieldAccessExpr
+            LambdaExpr indexedBy_leftOperandExtractor = new LambdaExpr();
+            indexedBy_leftOperandExtractor.addParameter(new Parameter(new UnknownType(), "_this"));
+            indexedBy_leftOperandExtractor.setBody( new ExpressionStmt( left.getExpression() ) );
+    
+            MethodCallExpr indexedByDSL = new MethodCallExpr(exprDSL, "indexedBy");
+            indexedByDSL.addArgument( indexedBy_indexedClass );
+            indexedByDSL.addArgument( indexedBy_constraintType );
+            indexedByDSL.addArgument( indexedBy_leftOperandExtractor );
+            if ( usedDeclarations.isEmpty() ) {
+                Expression indexedBy_rightValue = right.getExpression();
+                indexedByDSL.addArgument( indexedBy_rightValue );
+            } else if ( usedDeclarations.size() == 1 ) {
+                LambdaExpr indexedBy_rightOperandExtractor = new LambdaExpr();
+                indexedBy_rightOperandExtractor.addParameter(new Parameter(new UnknownType(), usedDeclarations.iterator().next()));
+                indexedBy_rightOperandExtractor.setBody( new ExpressionStmt( right.getExpression() ) );
+                indexedByDSL.addArgument( indexedBy_rightOperandExtractor );
+            } else {
+                throw new UnsupportedOperationException( "TODO" ); // TODO: possibly not to be indexed
+            }
+            result = indexedByDSL;
         }
-        result = indexedByDSL;
         // -- END all indexing stuff --
 
         
