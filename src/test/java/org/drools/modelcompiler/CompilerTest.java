@@ -92,7 +92,7 @@ public class CompilerTest {
                 "  $p : Person(age > $mark.age)\n" +
                 "  $s: String(this == $p.name)\n" +
                 "then\n" +
-                "  System.out.println(\"Found: \" + java.util.Arrays.asList($s));\n" +
+                "  System.out.println(\"Found: \" + $s);\n" +
                 "end";
 
         KieSession ksession = getKieSession( str );
