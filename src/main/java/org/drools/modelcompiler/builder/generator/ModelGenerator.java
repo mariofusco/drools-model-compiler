@@ -121,26 +121,23 @@ public class ModelGenerator {
             MethodCallExpr viewCall = new MethodCallExpr(ruleCall, "view");
             viewCall.addArgument(context.expression);
             
+            String ruleConsequenceAsBlock = "{" + ruleDescr.getConsequence().toString().trim() + "}";
+            BlockStmt ruleConsequence = JavaParser.parseBlock( ruleConsequenceAsBlock );
+            List<String> declUsedInRHS = ruleConsequence.getChildNodesByType(NameExpr.class).stream().map(NameExpr::getNameAsString).collect(Collectors.toList());
+            List<String> verifiedDeclUsedInRHS = context.declarations.keySet().stream().filter(declUsedInRHS::contains).collect(Collectors.toList());
+            
             MethodCallExpr thenCall = new MethodCallExpr(viewCall, "then");
-            LambdaExpr thenLambda = new LambdaExpr();
-            thenCall.addArgument(thenLambda);
-            thenLambda.addParameter(new Parameter(new UnknownType(), "c"));
-            NameExpr cNameExpr = new NameExpr("c");
-            MethodCallExpr onCall = new MethodCallExpr(cNameExpr, "on");
-            context.declarations.entrySet().stream().map(d -> "var_" + d.getKey() ).forEach( onCall::addArgument );
+            MethodCallExpr onCall = new MethodCallExpr(null, "on");
+            verifiedDeclUsedInRHS.stream().map(k -> "var_" + k ).forEach( onCall::addArgument );
             
             MethodCallExpr executeCall = new MethodCallExpr(onCall, "execute");
             LambdaExpr executeLambda = new LambdaExpr();
             executeCall.addArgument(executeLambda);
             executeLambda.setEnclosingParameters(true);
-            String ruleConsequenceAsBlock = "{" + ruleDescr.getConsequence().toString().trim() + "}";
-            BlockStmt ruleConsequence = JavaParser.parseBlock( ruleConsequenceAsBlock );
-            List<String> declUsedInRHS = ruleConsequence.getChildNodesByType(NameExpr.class).stream().map(NameExpr::getNameAsString).collect(Collectors.toList());
-            Stream<Parameter> verifiedDeclUsedInRHS = context.declarations.keySet().stream().filter(declUsedInRHS::contains).map(x -> new Parameter(new UnknownType(), x));
-            verifiedDeclUsedInRHS.forEach(executeLambda::addParameter);    
+            verifiedDeclUsedInRHS.stream().map(x -> new Parameter(new UnknownType(), x)).forEach(executeLambda::addParameter);    
             executeLambda.setBody( ruleConsequence );
 
-            thenLambda.setBody( new ExpressionStmt( executeCall ) );
+            thenCall.addArgument( executeCall );
             
             AssignExpr ruleAssign = new AssignExpr(ruleVar, thenCall, AssignExpr.Operator.ASSIGN);
             ruleBlock.addStatement(ruleAssign);
