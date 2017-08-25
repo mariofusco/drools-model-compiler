@@ -16,20 +16,53 @@
 
 package org.drools.modelcompiler;
 
-import java.util.List;
+import static org.junit.Assert.fail;
 
+import java.io.File;
+import java.util.List;
+import java.util.UUID;
+
+import org.drools.compiler.kie.builder.impl.InternalKieModule;
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
 import org.drools.modelcompiler.builder.CanonicalModelKieProject;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
 import org.kie.api.builder.KieFileSystem;
+import org.kie.api.builder.KieModule;
+import org.kie.api.builder.KieRepository;
 import org.kie.api.builder.Message;
+import org.kie.api.builder.ReleaseId;
+import org.kie.api.builder.model.KieBaseModel;
+import org.kie.api.builder.model.KieModuleModel;
+import org.kie.api.builder.model.KieSessionModel;
+import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 
-import static org.junit.Assert.fail;
-
+@RunWith(Parameterized.class)
 public class CompilerTest {
+    
+    public static enum RUN_TYPE {
+        USE_CANONICAL_MODEL,
+        STANDARD_FROM_DRL;
+    }
+    
+    @Parameters(name = "{0}")
+    public static Object[] params() {
+        return new Object[]{
+                            RUN_TYPE.STANDARD_FROM_DRL,
+                            RUN_TYPE.USE_CANONICAL_MODEL
+        };
+    }
+
+    private final RUN_TYPE testRunType;
+    
+    public CompilerTest(RUN_TYPE testRunType) {
+        this.testRunType = testRunType;
+    }
 
     @Test
     public void testBeta() {
@@ -59,7 +92,7 @@ public class CompilerTest {
                 "  $p : Person(age > $mark.age)\n" +
                 "  $s: String(this == $p.name)\n" +
                 "then\n" +
-                "  System.out.println(\"Found: \" + $s);\n" +
+                "  System.out.println(\"Found: \" + java.util.Arrays.asList($s));\n" +
                 "end";
 
         KieSession ksession = getKieSession( str );
@@ -95,20 +128,49 @@ public class CompilerTest {
     }
 
     private KieSession getKieSession(String str) {
-        return getKieSession( str, false );
-    }
-
-    private KieSession getKieSession(String str, boolean useCanonicalModel) {
         KieServices ks = KieServices.Factory.get();
-        KieFileSystem kfs = ks.newKieFileSystem().write( "src/main/resources/r1.drl", str );
-        KieBuilder kieBuilder = useCanonicalModel ?
+        
+        ReleaseId releaseId = ks.newReleaseId( "org.kie", "kjar-test-" + UUID.randomUUID(), "1.0" );
+        
+        KieRepository repo = ks.getRepository();
+        repo.removeKieModule( releaseId );
+        
+        KieFileSystem kfs = ks.newKieFileSystem();
+        kfs.writePomXML(KJARUtils.getPom(releaseId));
+        kfs.write( "src/main/resources/r1.drl", str );
+// This is actually taken from classloader of test (?) - or anyway it must, because the test are instantiating directly Person.
+//        String javaSrc = Person.class.getCanonicalName().replace( '.', File.separatorChar ) + ".java";
+//        Resource javaResource = ks.getResources().newFileSystemResource( "src/test/java/" + javaSrc );
+//        kfs.write( "src/main/java/" + javaSrc, javaResource );
+
+        KieBuilder kieBuilder = (testRunType == RUN_TYPE.USE_CANONICAL_MODEL) ?
                                 ( (KieBuilderImpl) ks.newKieBuilder( kfs ) ).buildAll( CanonicalModelKieProject::new ) :
                                 ks.newKieBuilder( kfs ).buildAll();
         List<Message> messages = kieBuilder.getResults().getMessages();
         if (!messages.isEmpty()) {
             fail(messages.toString());
         }
-        return ks.newKieContainer(ks.getRepository().getDefaultReleaseId()).newKieSession();
+        
+        if (testRunType == RUN_TYPE.STANDARD_FROM_DRL) { 
+            return ks.newKieContainer(releaseId).newKieSession();
+        } else {
+            InternalKieModule kieModule = (InternalKieModule) kieBuilder.getKieModule();
+            File kjarFile = TestFileUtils.bytesToTempKJARFile( releaseId, kieModule.getBytes(), ".jar" );
+            KieModule zipKieModule = new CanonicalKieModule( releaseId, getDefaultKieModuleModel( ks ), kjarFile );
+            repo.addKieModule( zipKieModule );
+            
+            KieContainer kieContainer = ks.newKieContainer( releaseId );
+            KieSession kieSession = kieContainer.newKieSession();
+            
+            return kieSession;
+        }
+    }
+    private KieModuleModel getDefaultKieModuleModel(KieServices ks) {
+        KieModuleModel kproj = ks.newKieModuleModel();
+        KieBaseModel kieBaseModel1 = kproj.newKieBaseModel( "kbase" ).setDefault( true );
+        KieSessionModel ksession1 = kieBaseModel1.newKieSessionModel( "ksession" ).setDefault( true );
+        return kproj;
+
     }
 
     @Test
@@ -122,7 +184,7 @@ public class CompilerTest {
                 "  System.out.println(\"Found: \" + $o);\n" +
                 "end";
 
-        KieSession ksession = getKieSession( str, true );
+        KieSession ksession = getKieSession( str );
 
         ksession.insert( "Mark" );
         ksession.insert(new Person("Mark", 37));
