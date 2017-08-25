@@ -16,6 +16,8 @@
 
 package org.drools.modelcompiler.builder.generator;
 
+import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -72,8 +74,6 @@ import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
-
-import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
 public class ModelGenerator {
 
@@ -299,6 +299,9 @@ public class ModelGenerator {
         
         exprDSL.addArgument(exprDSL_predicate);
         
+        Expression result = exprDSL;
+        
+        
         // -- all indexing stuff --
         Class<?> indexType = Stream.of( left, right ).map( IndexedExpression::getIndexType )
                                    .flatMap( x -> optToStream( x ) )
@@ -325,13 +328,13 @@ public class ModelGenerator {
         } else {
             throw new UnsupportedOperationException( "TODO" ); // TODO: possibly not to be indexed
         }
+        result = indexedByDSL;
         // -- END all indexing stuff --
 
-        Expression result = indexedByDSL;
-
+        
         // -- all reactOn stuff --
         if ( !reactOnProperties.isEmpty() ) {
-            MethodCallExpr reactOnDSL = new MethodCallExpr(indexedByDSL, "reactOn");
+            MethodCallExpr reactOnDSL = new MethodCallExpr(result, "reactOn");
             Stream.concat( reactOnProperties.stream(),
                            Optional.ofNullable( listenedProperties ).map( Collection::stream ).orElseGet( Stream::empty ) )
                            .map( StringLiteralExpr::new )

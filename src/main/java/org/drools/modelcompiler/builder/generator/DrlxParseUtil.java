@@ -99,21 +99,34 @@ public class DrlxParseUtil {
             if (firstNode instanceof NameExpr) {
                 String firstName = ( (NameExpr) firstNode ).getName().getIdentifier();
                 if ( context.declarations.containsKey( firstName ) ) {
+                    // do NOT append any reactOnProperties.
+                    // because reactOnProperties is referring only to the properties of the type of the pattern, not other declarations properites.
                     usedDeclarations.add( firstName );
                     if (!isInLineCast) {
                         typeCursor = context.declarations.get( firstName );
                     }
                     previous = new NameExpr( firstName );
                     childNodes = drlxExpr.getChildNodes().subList( 1, drlxExpr.getChildNodes().size() );
+                } else {
+                    Method firstAccessor = ClassUtils.getAccessor( typeCursor, firstName );
+                    if (firstAccessor != null) {
+                        reactOnProperties.add( firstName );
+                        throw new UnsupportedOperationException("TODO"); // TODO
+                    } else {
+                        throw new UnsupportedOperationException("firstNode I don't know about");
+                        // TODO would it be fine to assume is a global if it's not in the declarations and not the first accesssor in a chain?
+                    }
                 }
             } else if (firstNode instanceof ThisExpr) {
                 childNodes = drlxExpr.getChildNodes().subList( 1, drlxExpr.getChildNodes().size() );
                 previous = new NameExpr( "_this" );
+                if ( childNodes.size() >= 1 && childNodes.get(0) instanceof NameExpr ) {
+                    NameExpr child0 = (NameExpr) childNodes.get(0);
+                    reactOnProperties.add( child0.getName().getIdentifier() );
+                }
             } else {
                 throw new UnsupportedOperationException( "Unknown node: " + firstNode );
             }
-
-            reactOnProperties.add( childNodes.get(0).toString() );
 
             IndexedExpression indexedExpression = new IndexedExpression();
             if (isInLineCast) {

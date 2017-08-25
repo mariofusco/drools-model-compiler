@@ -16,9 +16,9 @@
 
 package org.drools.modelcompiler;
 
+import static org.junit.Assert.fail;
+
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
@@ -38,8 +38,6 @@ import org.kie.api.builder.model.KieSessionModel;
 import org.kie.api.io.Resource;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
-
-import static org.junit.Assert.fail;
 
 public class BuildFromKJarTest {
 
@@ -75,7 +73,7 @@ public class BuildFromKJarTest {
 
         KieFileSystem kfs = ks.newKieFileSystem();
         kfs.writeKModuleXML(getDefaultKieModuleModel(ks).toXML());
-        kfs.writePomXML(getPom(releaseId));
+        kfs.writePomXML(KJARUtils.getPom(releaseId));
 
         String javaSrc = Person.class.getCanonicalName().replace( '.', File.separatorChar ) + ".java";
         Resource javaResource = ks.getResources().newFileSystemResource( "src/test/java/" + javaSrc );
@@ -91,7 +89,7 @@ public class BuildFromKJarTest {
         }
 
         InternalKieModule kieModule = (InternalKieModule) kieBuilder.getKieModule();
-        return bytesToFile( releaseId, kieModule.getBytes(), ".jar" );
+        return TestFileUtils.bytesToTempKJARFile( releaseId, kieModule.getBytes(), ".jar" );
     }
 
 
@@ -101,19 +99,6 @@ public class BuildFromKJarTest {
         KieSessionModel ksession1 = kieBaseModel1.newKieSessionModel( "ksession" ).setDefault( true );
         return kproj;
 
-    }
-    private String getPom(ReleaseId releaseId) {
-        String pom =
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-                "<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
-                "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd\">\n" +
-                "  <modelVersion>4.0.0</modelVersion>\n" +
-                "\n" +
-                "  <groupId>" + releaseId.getGroupId() + "</groupId>\n" +
-                "  <artifactId>" + releaseId.getArtifactId() + "</artifactId>\n" +
-                "  <version>" + releaseId.getVersion() + "</version>\n" +
-                "</project>";
-        return pom;
     }
 
     private String getRule() {
@@ -125,19 +110,6 @@ public class BuildFromKJarTest {
                "then\n" +
                "  System.out.println($p2.getName() + \" is older than \" + $p1.getName());\n" +
                "end";
-    }
-
-    private File bytesToFile( ReleaseId releaseId, byte[] bytes, String extension ) {
-        File file = new File( System.getProperty( "java.io.tmpdir" ), releaseId.getArtifactId() + "-" + releaseId.getVersion() + extension );
-        try {
-            FileOutputStream fos = new FileOutputStream( file );
-            fos.write( bytes );
-            fos.flush();
-            fos.close();
-        } catch ( IOException e ) {
-            throw new RuntimeException( e );
-        }
-        return file;
     }
 
 }
