@@ -16,8 +16,6 @@
 
 package org.drools.modelcompiler;
 
-import static org.junit.Assert.fail;
-
 import java.io.File;
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +40,9 @@ import org.kie.api.builder.model.KieSessionModel;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
 @RunWith(Parameterized.class)
 public class CompilerTest {
     
@@ -64,23 +65,42 @@ public class CompilerTest {
         this.testRunType = testRunType;
     }
 
+    public static class Result {
+        private Object value;
+
+        public Object getValue() {
+            return value;
+        }
+
+        public void setValue( Object value ) {
+            this.value = value;
+        }
+    }
+
     @Test
     public void testBeta() {
         String str =
+                "import " + Result.class.getCanonicalName() + ";" +
                 "import " + Person.class.getCanonicalName() + ";" +
                 "rule R when\n" +
+                "  $r : Result()\n" +
                 "  $p1 : Person(name == \"Mark\")\n" +
                 "  $p2 : Person(name != \"Mark\", age > $p1.age)\n" +
                 "then\n" +
-                "  System.out.println($p2.getName() + \" is older than \" + $p1.getName());\n" +
+                "  $r.setValue($p2.getName() + \" is older than \" + $p1.getName());\n" +
                 "end";
 
         KieSession ksession = getKieSession( str );
+
+        Result result = new Result();
+        ksession.insert(result);
 
         ksession.insert(new Person("Mark", 37));
         ksession.insert(new Person("Edson", 35));
         ksession.insert(new Person("Mario", 40));
         ksession.fireAllRules();
+
+        assertEquals( "Mario is older than Mark", result.getValue() );
     }
 
     @Test
