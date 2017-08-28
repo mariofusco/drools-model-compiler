@@ -16,8 +16,6 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -74,6 +72,8 @@ import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
+
+import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
 public class ModelGenerator {
 
@@ -217,24 +217,28 @@ public class ModelGenerator {
         IndexUtil.ConstraintType decodeConstraintType = DrlxParseUtil.toConstraintType( operator );
         Set<String> usedDeclarations = new HashSet<>();
         Set<String> reactOnProperties = new HashSet<>();
-        IndexedExpression left = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getLeft(), usedDeclarations, reactOnProperties );
-        IndexedExpression right = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getRight(), usedDeclarations, reactOnProperties );
+        TypedExpression left = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getLeft(), usedDeclarations, reactOnProperties );
+        TypedExpression right = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getRight(), usedDeclarations, reactOnProperties );
 
         Expression combo;
-        switch ( operator ) {
-            case EQUALS:
-                MethodCallExpr methodCallExpr = new MethodCallExpr( left.getExpression(), "equals" );
-                methodCallExpr.addArgument( right.getExpression() ); // don't create NodeList with static method because missing "parent for child" would null and NPE
-                combo = methodCallExpr; 
-                break;
-            case NOT_EQUALS:
-                MethodCallExpr methodCallExpr2 = new MethodCallExpr( left.getExpression(), "equals" );
-                methodCallExpr2.addArgument( right.getExpression() );
-                combo = methodCallExpr2; 
-                combo = new UnaryExpr( combo, UnaryExpr.Operator.LOGICAL_COMPLEMENT );
-                break;
-            default:
-                combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
+        if ( left.isPrimitive() ) {
+            combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
+        } else {
+            switch ( operator ) {
+                case EQUALS:
+                    MethodCallExpr methodCallExpr = new MethodCallExpr( left.getExpression(), "equals" );
+                    methodCallExpr.addArgument( right.getExpression() ); // don't create NodeList with static method because missing "parent for child" would null and NPE
+                    combo = methodCallExpr;
+                    break;
+                case NOT_EQUALS:
+                    MethodCallExpr methodCallExpr2 = new MethodCallExpr( left.getExpression(), "equals" );
+                    methodCallExpr2.addArgument( right.getExpression() );
+                    combo = methodCallExpr2;
+                    combo = new UnaryExpr( combo, UnaryExpr.Operator.LOGICAL_COMPLEMENT );
+                    break;
+                default:
+                    combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
+            }
         }
 
         if (left.getPrefixExpression() != null) {
@@ -263,8 +267,8 @@ public class ModelGenerator {
         // TODO what if not atomicExprDescr ?
         Set<String> usedDeclarations = new HashSet<>();
         Set<String> reactOnProperties = new HashSet<>();
-        IndexedExpression left = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations, reactOnProperties );
-        IndexedExpression right = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations, reactOnProperties );
+        TypedExpression left = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getLeft(), usedDeclarations, reactOnProperties );
+        TypedExpression right = MvelParseUtil.toTypedExpression( context, pattern, (AtomicExprDescr) relationalExprDescr.getRight(), usedDeclarations, reactOnProperties );
         String combo;
         switch ( relationalExprDescr.getOperator() ) {
             case "==":
@@ -281,8 +285,8 @@ public class ModelGenerator {
     }
 
     private static Expression buildDslExpression( Collection<String> listenedProperties, String bindingId, ConstraintType decodeConstraintType,
-                                              Set<String> usedDeclarations, Set<String> reactOnProperties,
-                                              IndexedExpression left, IndexedExpression right, Expression combo ) {
+                                                  Set<String> usedDeclarations, Set<String> reactOnProperties,
+                                                  TypedExpression left, TypedExpression right, Expression combo ) {
         
         MethodCallExpr exprDSL = new MethodCallExpr(null, "expr");
         exprDSL.addArgument( new NameExpr("var_" + bindingId) );
@@ -302,7 +306,7 @@ public class ModelGenerator {
         // -- all indexing stuff --
         // .indexBy(..) is only added if left is not an identity expression:
         if ( !(left.getExpression() instanceof NameExpr && ((NameExpr)left.getExpression()).getName().getIdentifier().equals("_this")) ) {
-            Class<?> indexType = Stream.of( left, right ).map( IndexedExpression::getIndexType )
+            Class<?> indexType = Stream.of( left, right ).map( TypedExpression::getType )
                                        .flatMap( x -> optToStream( x ) )
                                        .findFirst().get();
             

@@ -194,7 +194,6 @@ public class CompilerTest {
     }
 
     @Test
-//    @Ignore("TODO: implement parsing of non Java expression in drlx parser")
     public void testInlineCast() {
         String str =
                 "import " + Person.class.getCanonicalName() + ";" +
@@ -209,6 +208,24 @@ public class CompilerTest {
         ksession.insert( "Mark" );
         ksession.insert(new Person("Mark", 37));
         ksession.insert(new Person("Mario", 40));
+        ksession.fireAllRules();
+    }
+
+    @Test
+    public void testNullSafeDereferncing() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $o : Person( name.length == 4 )\n" +
+                "then\n" +
+                "  System.out.println(\"Found: \" + $o);\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        ksession.insert( "Mark" );
+        ksession.insert(new Person("Mark", 37));
+//        ksession.insert(new Person(null, 40));
         ksession.fireAllRules();
     }
 }

@@ -20,24 +20,21 @@ import java.util.Optional;
 
 import com.github.javaparser.ast.expr.Expression;
 
-public class IndexedExpression {
+public class TypedExpression {
 
     private Expression expression;
-    private String removeMe;
-    private Optional<Class<?>> indexType;
+    private Optional<Class<?>> type;
     private Expression prefixExpression;
 
-    public IndexedExpression( ) { }
+    public TypedExpression() { }
 
-    public IndexedExpression( Expression expression, Optional<Class<?>> indexType ) {
+    public TypedExpression( Expression expression, Optional<Class<?>> type ) {
         this.expression = expression;
-        this.indexType = indexType;
-        this.removeMe = null;
+        this.type = type;
     }
     
-    public IndexedExpression( String expression, Optional<Class<?>> indexType ) {
-        this.removeMe = expression;
-        this.indexType = indexType;
+    public TypedExpression( String expression, Optional<Class<?>> type ) {
+        this.type = type;
         this.expression = null;
     }
     
@@ -45,13 +42,13 @@ public class IndexedExpression {
         return expression;
     }
 
-    public IndexedExpression setExpression( Expression expression ) {
+    public TypedExpression setExpression( Expression expression ) {
         this.expression = expression;
         return this;
     }
 
-    public IndexedExpression setIndexType( Optional<Class<?>> indexType ) {
-        this.indexType = indexType;
+    public TypedExpression setType( Optional<Class<?>> type ) {
+        this.type = type;
         return this;
     }
 
@@ -59,16 +56,20 @@ public class IndexedExpression {
         return prefixExpression;
     }
 
-    public IndexedExpression setPrefixExpression( Expression prefixExpression ) {
+    public TypedExpression setPrefixExpression( Expression prefixExpression ) {
         this.prefixExpression = prefixExpression;
         return this;
     }
 
     public String getExpressionAsString() {
-        return expression != null ? expression.toString() : removeMe ;
+        return expression.toString();
     }
 
-    public Optional<Class<?>> getIndexType() {
-        return indexType;
+    public Optional<Class<?>> getType() {
+        return type;
+    }
+
+    public boolean isPrimitive() {
+        return type.map( Class::isPrimitive ).orElse( false );
     }
 }

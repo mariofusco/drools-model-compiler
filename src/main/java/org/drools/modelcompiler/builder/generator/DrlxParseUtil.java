@@ -60,15 +60,15 @@ public class DrlxParseUtil {
         throw new UnsupportedOperationException( "Unknown operator " + operator );
     }
 
-    public static IndexedExpression toTypedExpression( RuleContext context, Class<?> patternType, Expression drlxExpr,
+    public static TypedExpression toTypedExpression( RuleContext context, Class<?> patternType, Expression drlxExpr,
                                                      Set<String> usedDeclarations, Set<String> reactOnProperties ) {
         
         Class<?> typeCursor = patternType;
         
         if ( drlxExpr instanceof LiteralExpr ) {
-            return new IndexedExpression( drlxExpr , Optional.empty());
+            return new TypedExpression( drlxExpr , Optional.empty());
         } else if ( drlxExpr instanceof ThisExpr ) {
-            return new IndexedExpression( new NameExpr("_this") , Optional.empty());
+            return new TypedExpression( new NameExpr( "_this") , Optional.empty());
         } else if ( drlxExpr instanceof NameExpr ) {
             String name = drlxExpr.toString();
             reactOnProperties.add(name);
@@ -78,7 +78,7 @@ public class DrlxParseUtil {
             NameExpr _this = new NameExpr("_this");
             MethodCallExpr body = new MethodCallExpr( _this, accessor.getName() );
             
-            return new IndexedExpression( body, Optional.of( accessorReturnType ));
+            return new TypedExpression( body, Optional.of( accessorReturnType ));
         } else if ( drlxExpr instanceof FieldAccessExpr ) {
             List<Node> childNodes = drlxExpr.getChildNodes();
             Node firstNode = childNodes.get(0);
@@ -95,7 +95,8 @@ public class DrlxParseUtil {
 
             }
 
-            Expression previous = null;
+            Expression previous;
+
             if (firstNode instanceof NameExpr) {
                 String firstName = ( (NameExpr) firstNode ).getName().getIdentifier();
                 if ( context.declarations.containsKey( firstName ) ) {
@@ -106,32 +107,46 @@ public class DrlxParseUtil {
                         typeCursor = context.declarations.get( firstName );
                     }
                     previous = new NameExpr( firstName );
-                    childNodes = drlxExpr.getChildNodes().subList( 1, drlxExpr.getChildNodes().size() );
                 } else {
                     Method firstAccessor = ClassUtils.getAccessor( typeCursor, firstName );
                     if (firstAccessor != null) {
                         reactOnProperties.add( firstName );
-                        throw new UnsupportedOperationException("TODO"); // TODO
+                        typeCursor = firstAccessor.getReturnType();
+                        previous = new MethodCallExpr( new NameExpr( "_this" ), firstAccessor.getName() );
                     } else {
                         throw new UnsupportedOperationException("firstNode I don't know about");
                         // TODO would it be fine to assume is a global if it's not in the declarations and not the first accesssor in a chain?
                     }
                 }
+
             } else if (firstNode instanceof ThisExpr) {
-                childNodes = drlxExpr.getChildNodes().subList( 1, drlxExpr.getChildNodes().size() );
                 previous = new NameExpr( "_this" );
-                if ( childNodes.size() >= 1 && childNodes.get(0) instanceof NameExpr ) {
-                    NameExpr child0 = (NameExpr) childNodes.get(0);
+                if ( childNodes.size() > 1 && childNodes.get(1) instanceof NameExpr ) {
+                    NameExpr child0 = (NameExpr) childNodes.get(1);
                     reactOnProperties.add( child0.getName().getIdentifier() );
+                }
+
+            } else if (firstNode instanceof FieldAccessExpr && ( (FieldAccessExpr) firstNode ).getScope() instanceof ThisExpr) {
+                String firstName = ( (FieldAccessExpr) firstNode ).getName().getIdentifier();
+                Method firstAccessor = ClassUtils.getAccessor( typeCursor, firstName );
+                if (firstAccessor != null) {
+                    reactOnProperties.add( firstName );
+                    typeCursor = firstAccessor.getReturnType();
+                    previous = new MethodCallExpr( new NameExpr( "_this" ), firstAccessor.getName() );
+                } else {
+                    throw new UnsupportedOperationException("firstNode I don't know about");
+                    // TODO would it be fine to assume is a global if it's not in the declarations and not the first accesssor in a chain?
                 }
             } else {
                 throw new UnsupportedOperationException( "Unknown node: " + firstNode );
             }
 
-            IndexedExpression indexedExpression = new IndexedExpression();
+            childNodes = drlxExpr.getChildNodes().subList( 1, drlxExpr.getChildNodes().size() );
+
+            TypedExpression typedExpression = new TypedExpression();
             if (isInLineCast) {
                 ReferenceType castType = new ClassOrInterfaceType( typeCursor.getName() );
-                indexedExpression.setPrefixExpression( new InstanceOfExpr( previous, castType ) );
+                typedExpression.setPrefixExpression( new InstanceOfExpr( previous, castType ) );
                 previous = new EnclosedExpr( new CastExpr( castType, previous ) );
             }
 
@@ -145,7 +160,7 @@ public class DrlxParseUtil {
                 previous = new MethodCallExpr( previous, accessor.getName() );
             }
 
-            return indexedExpression.setExpression( previous ).setIndexType( Optional.of( typeCursor ) );
+            return typedExpression.setExpression( previous ).setType( Optional.of( typeCursor ) );
         } else {
             // TODO the below should not be needed anymore...
             drlxExpr.getChildNodes();
@@ -173,7 +188,7 @@ public class DrlxParseUtil {
                     telescoping.append( "." + accessor.getName() + "()" );
                 }
             }
-            return new IndexedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
+            return new TypedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
         }
     }
 }
