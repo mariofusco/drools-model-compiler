@@ -196,36 +196,50 @@ public class CompilerTest {
     @Test
     public void testInlineCast() {
         String str =
+                "import " + Result.class.getCanonicalName() + ";" +
                 "import " + Person.class.getCanonicalName() + ";" +
                 "rule R when\n" +
+                "  $r : Result()\n" +
                 "  $o : Object( this#Person.name == \"Mark\" )\n" +
                 "then\n" +
-                "  System.out.println(\"Found: \" + $o);\n" +
+                "  $r.setValue(\"Found: \" + $o);\n" +
                 "end";
 
         KieSession ksession = getKieSession( str );
+
+        Result result = new Result();
+        ksession.insert(result);
 
         ksession.insert( "Mark" );
         ksession.insert(new Person("Mark", 37));
         ksession.insert(new Person("Mario", 40));
         ksession.fireAllRules();
+
+        assertEquals( "Found: Mark", result.getValue() );
     }
 
     @Test
     public void testNullSafeDereferncing() {
         String str =
+                "import " + Result.class.getCanonicalName() + ";" +
                 "import " + Person.class.getCanonicalName() + ";" +
                 "rule R when\n" +
-                "  $o : Person( name.length == 4 )\n" +
+                "  $r : Result()\n" +
+                "  $p : Person( name!.length == 4 )\n" +
                 "then\n" +
-                "  System.out.println(\"Found: \" + $o);\n" +
+                "  $r.setValue(\"Found: \" + $p);\n" +
                 "end";
 
         KieSession ksession = getKieSession( str );
 
-        ksession.insert( "Mark" );
+        Result result = new Result();
+        ksession.insert(result);
+
         ksession.insert(new Person("Mark", 37));
-//        ksession.insert(new Person(null, 40));
+        ksession.insert(new Person("Mario", 40));
+        ksession.insert(new Person(null, 40));
         ksession.fireAllRules();
+
+        assertEquals( "Found: Mark", result.getValue() );
     }
 }

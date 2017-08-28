@@ -23,6 +23,8 @@ import java.util.Set;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.drlx.expr.InlineCastExpr;
+import com.github.javaparser.ast.drlx.expr.NullSafeFieldAccessExpr;
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
@@ -32,6 +34,7 @@ import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.NullLiteralExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
@@ -92,7 +95,6 @@ public class DrlxParseUtil {
                     throw new RuntimeException( e );
                 }
                 firstNode = inlineCast.getExpression();
-
             }
 
             Expression previous;
@@ -148,6 +150,9 @@ public class DrlxParseUtil {
                 ReferenceType castType = new ClassOrInterfaceType( typeCursor.getName() );
                 typedExpression.setPrefixExpression( new InstanceOfExpr( previous, castType ) );
                 previous = new EnclosedExpr( new CastExpr( castType, previous ) );
+            }
+            if ( drlxExpr instanceof NullSafeFieldAccessExpr ) {
+                typedExpression.setPrefixExpression( new BinaryExpr( previous, new NullLiteralExpr(), Operator.NOT_EQUALS ) );
             }
 
             for ( Node part : childNodes ) {
