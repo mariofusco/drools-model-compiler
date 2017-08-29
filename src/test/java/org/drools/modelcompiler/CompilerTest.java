@@ -16,9 +16,6 @@
 
 package org.drools.modelcompiler;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-
 import java.io.File;
 import java.util.List;
 import java.util.UUID;
@@ -43,6 +40,9 @@ import org.kie.api.builder.model.KieModuleModel;
 import org.kie.api.builder.model.KieSessionModel;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class CompilerTest {
@@ -327,5 +327,29 @@ public class CompilerTest {
         assertEquals(1, results.size());
         assertEquals("Mark", results.get(0).getValue());
         assertEquals(1, getObjects(ksession, Person.class).size());
+    }
+
+    @Test
+    public void testSimpleUpdate() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $p : Person( name.length == 4 )\n" +
+                "then\n" +
+                "  $p.setAge($p.getAge()+1);" +
+                "  update($p);\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mark = new Person("Mark", 37);
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mark);
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        assertEquals( 38, mark.getAge() );
+        assertEquals( 40, mario.getAge() );
     }
 }

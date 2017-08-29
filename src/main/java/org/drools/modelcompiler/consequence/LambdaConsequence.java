@@ -16,7 +16,7 @@
 
 package org.drools.modelcompiler.consequence;
 
-import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 
 import org.drools.core.WorkingMemory;
@@ -111,7 +111,7 @@ public class LambdaConsequence implements Consequence {
         private final KnowledgeHelper knowledgeHelper;
         private final WorkingMemory workingMemory;
 
-        private final Map<Object, InternalFactHandle> fhLookup = new HashMap<>();
+        private final Map<Object, InternalFactHandle> fhLookup = new IdentityHashMap<>();
 
         DroolsImpl(KnowledgeHelper knowledgeHelper, WorkingMemory workingMemory) {
             this.workingMemory = workingMemory;

@@ -16,8 +16,7 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
-
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -66,16 +65,23 @@ import org.drools.compiler.lang.descr.RelationalExprDescr;
 import org.drools.compiler.lang.descr.RuleDescr;
 import org.drools.core.definitions.InternalKnowledgePackage;
 import org.drools.core.rule.Pattern;
+import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.drools.drlx.DrlxParser;
+import org.drools.model.BitMask;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
+import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
+
 public class ModelGenerator {
+
+    private static final ClassOrInterfaceType RULE_TYPE = JavaParser.parseClassOrInterfaceType( Rule.class.getCanonicalName() );
+    private static final ClassOrInterfaceType BITMASK_TYPE = JavaParser.parseClassOrInterfaceType( BitMask.class.getCanonicalName() );
 
     public static PackageModel generateModel( InternalKnowledgePackage pkg, List<RuleDescrImpl> rules ) {
         String name = pkg.getName();
@@ -89,21 +95,17 @@ public class ModelGenerator {
 
             MethodDeclaration ruleMethod = new MethodDeclaration();
             ruleMethod.setModifiers(EnumSet.of(Modifier.PRIVATE));
-            ClassOrInterfaceType ruleType = JavaParser.parseClassOrInterfaceType(Rule.class.getCanonicalName());
-            ruleMethod.setType(ruleType);
+            ruleMethod.setType( RULE_TYPE );
             ruleMethod.setName( "rule_" + toId( ruleDescr.getName() ) );
             BlockStmt ruleBlock = new BlockStmt();
             ruleMethod.setBody(ruleBlock);
 
             for ( Entry<String, Class<?>> decl : context.declarations.entrySet() ) {
-                ClassOrInterfaceType var_type = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
+                ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
                 ClassOrInterfaceType declType = JavaParser.parseClassOrInterfaceType( decl.getValue().getCanonicalName() );
                 
-                var_type.setTypeArguments(declType);
-                VariableDeclarationExpr var_ = new VariableDeclarationExpr(var_type,
-                                                                           "var_" + decl.getKey(),
-                                                                           Modifier.FINAL);
-                
+                varType.setTypeArguments(declType);
+                VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "var_" + decl.getKey(), Modifier.FINAL);
                 
                 MethodCallExpr variableOfCall = new MethodCallExpr(null, "variableOf");
                 MethodCallExpr typeCall = new MethodCallExpr(null, "type");
@@ -114,7 +116,7 @@ public class ModelGenerator {
                 ruleBlock.addStatement(var_assign);
             }
 
-            VariableDeclarationExpr ruleVar = new VariableDeclarationExpr(ruleType, "rule");
+            VariableDeclarationExpr ruleVar = new VariableDeclarationExpr( RULE_TYPE, "rule");
             
             MethodCallExpr ruleCall = new MethodCallExpr(null, "rule");
             ruleCall.addArgument( new StringLiteralExpr( ruleDescr.getName() ) );
@@ -127,7 +129,7 @@ public class ModelGenerator {
             List<String> declUsedInRHS = ruleConsequence.getChildNodesByType(NameExpr.class).stream().map(NameExpr::getNameAsString).collect(Collectors.toList());
             List<String> verifiedDeclUsedInRHS = context.declarations.keySet().stream().filter(declUsedInRHS::contains).collect(Collectors.toList());
             
-            boolean rhsRewritten = rewriteRHS(ruleConsequence);
+            boolean rhsRewritten = rewriteRHS(context, ruleBlock, ruleConsequence);
             
             MethodCallExpr thenCall = new MethodCallExpr(viewCall, "then");
             MethodCallExpr onCall = new MethodCallExpr(null, "on");
@@ -157,27 +159,63 @@ public class ModelGenerator {
         return packageModel;
     }
 
-    private static boolean rewriteRHS(BlockStmt rhs) {
-        boolean rewrote = false;
-        List<MethodCallExpr> inserts = rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("insert") && !mce.getScope().isPresent() ).collect(Collectors.toList());
-        if (!inserts.isEmpty()) {
-            rewrote = true;
-            inserts.forEach( mce -> mce.setScope(new NameExpr("drools")) );
+    private static boolean rewriteRHS(RuleContext context, BlockStmt ruleBlock, BlockStmt rhs) {
+        List<MethodCallExpr> methodCallExprs = rhs.getChildNodesByType(MethodCallExpr.class);
+        List<MethodCallExpr> updateExprs = new ArrayList<>();
+
+        boolean hasWMAs = methodCallExprs.stream()
+           .filter(mce -> isWMAMethod( mce ) )
+           .peek( mce -> {
+                if (!mce.getScope().isPresent()) {
+                    mce.setScope(new NameExpr("drools"));
+                }
+                if (mce.getNameAsString().equals("update")) {
+                    updateExprs.add( mce );
+                }
+           })
+           .count() > 0;
+
+        for (MethodCallExpr updateExpr : updateExprs) {
+            Expression argExpr = updateExpr.getArgument( 0 );
+            if (argExpr instanceof NameExpr) {
+                String updatedVar = ( (NameExpr) argExpr ).getNameAsString();
+                Class<?> updatedClass = context.declarations.get( updatedVar );
+
+                MethodCallExpr bitMaskCreation = new MethodCallExpr( new NameExpr( BitMask.class.getCanonicalName() ), "getPatternMask" );
+                bitMaskCreation.addArgument( new ClassExpr( JavaParser.parseClassOrInterfaceType( updatedClass.getCanonicalName() ) ) );
+
+                methodCallExprs.subList( 0, methodCallExprs.indexOf( updateExpr ) ).stream()
+                               .filter( mce -> mce.getScope().isPresent() && hasScope( mce, updatedVar ) )
+                               .map( mce -> ClassUtils.setter2property( mce.getNameAsString() ) )
+                               .filter( o -> o != null )
+                               .distinct()
+                               .forEach( s -> bitMaskCreation.addArgument( new StringLiteralExpr( s ) ) );
+
+                VariableDeclarationExpr bitMaskVar = new VariableDeclarationExpr(BITMASK_TYPE, "mask_" + updatedVar, Modifier.FINAL);
+                AssignExpr bitMaskAssign = new AssignExpr(bitMaskVar, bitMaskCreation, AssignExpr.Operator.ASSIGN);
+                ruleBlock.addStatement(bitMaskAssign);
+
+                updateExpr.addArgument( "mask_" + updatedVar );
+            }
         }
-        if (rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("insert")).findAny().isPresent()) {
-            rewrote = true;
-        }
-        
-        List<MethodCallExpr> deletes = rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("delete") && !mce.getScope().isPresent() ).collect(Collectors.toList());
-        if (!deletes.isEmpty()) {
-            rewrote = true;
-            deletes.forEach( mce -> mce.setScope(new NameExpr("drools")) );
-        }
-        if (rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("delete")).findAny().isPresent()) {
-            rewrote = true;
-        }
-        
-        return rewrote;
+
+        return hasWMAs;
+    }
+
+    private static boolean isWMAMethod( MethodCallExpr mce ) {
+        return isDroolsScopeInWMA( mce ) && (
+                mce.getNameAsString().equals("insert") ||
+                mce.getNameAsString().equals("delete") ||
+                mce.getNameAsString().equals("update") );
+    }
+
+    private static boolean isDroolsScopeInWMA( MethodCallExpr mce ) {
+        return !mce.getScope().isPresent() || hasScope( mce, "drools" );
+    }
+
+    private static boolean hasScope( MethodCallExpr mce, String scope ) {
+        return mce.getScope().get() instanceof NameExpr &&
+               ( (NameExpr) mce.getScope().get() ).getNameAsString().equals( scope );
     }
 
     private static void visit( RuleContext context, BaseDescr descr ) {

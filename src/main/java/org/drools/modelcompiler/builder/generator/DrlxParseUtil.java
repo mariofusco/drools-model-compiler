@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.drlx.expr.InlineCastExpr;
 import com.github.javaparser.ast.drlx.expr.NullSafeFieldAccessExpr;
@@ -36,7 +37,6 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
@@ -147,7 +147,7 @@ public class DrlxParseUtil {
 
             TypedExpression typedExpression = new TypedExpression();
             if (isInLineCast) {
-                ReferenceType castType = new ClassOrInterfaceType( typeCursor.getName() );
+                ReferenceType castType = JavaParser.parseClassOrInterfaceType( typeCursor.getName() );
                 typedExpression.setPrefixExpression( new InstanceOfExpr( previous, castType ) );
                 previous = new EnclosedExpr( new CastExpr( castType, previous ) );
             }
