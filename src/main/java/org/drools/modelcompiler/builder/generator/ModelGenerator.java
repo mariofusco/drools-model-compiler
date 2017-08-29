@@ -16,6 +16,8 @@
 
 package org.drools.modelcompiler.builder.generator;
 
+import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -73,13 +75,12 @@ import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
-import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
-
 public class ModelGenerator {
 
     public static PackageModel generateModel( InternalKnowledgePackage pkg, List<RuleDescrImpl> rules ) {
         String name = pkg.getName();
         PackageModel packageModel = new PackageModel( name );
+        packageModel.addImports(pkg.getTypeResolver().getImports());
         for ( RuleDescrImpl descr : rules ) {
             RuleDescr ruleDescr = descr.getDescr();
             RuleContext context = new RuleContext( pkg );
@@ -126,6 +127,8 @@ public class ModelGenerator {
             List<String> declUsedInRHS = ruleConsequence.getChildNodesByType(NameExpr.class).stream().map(NameExpr::getNameAsString).collect(Collectors.toList());
             List<String> verifiedDeclUsedInRHS = context.declarations.keySet().stream().filter(declUsedInRHS::contains).collect(Collectors.toList());
             
+            boolean rhsRewritten = rewriteRHS(ruleConsequence);
+            
             MethodCallExpr thenCall = new MethodCallExpr(viewCall, "then");
             MethodCallExpr onCall = new MethodCallExpr(null, "on");
             verifiedDeclUsedInRHS.stream().map(k -> "var_" + k ).forEach( onCall::addArgument );
@@ -134,6 +137,9 @@ public class ModelGenerator {
             LambdaExpr executeLambda = new LambdaExpr();
             executeCall.addArgument(executeLambda);
             executeLambda.setEnclosingParameters(true);
+            if (rhsRewritten) {
+                executeLambda.addParameter(new Parameter(new UnknownType(), "drools"));
+            }
             verifiedDeclUsedInRHS.stream().map(x -> new Parameter(new UnknownType(), x)).forEach(executeLambda::addParameter);    
             executeLambda.setBody( ruleConsequence );
 
@@ -149,6 +155,29 @@ public class ModelGenerator {
 
         packageModel.print();
         return packageModel;
+    }
+
+    private static boolean rewriteRHS(BlockStmt rhs) {
+        boolean rewrote = false;
+        List<MethodCallExpr> inserts = rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("insert") && !mce.getScope().isPresent() ).collect(Collectors.toList());
+        if (!inserts.isEmpty()) {
+            rewrote = true;
+            inserts.forEach( mce -> mce.setScope(new NameExpr("drools")) );
+        }
+        if (rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("insert")).findAny().isPresent()) {
+            rewrote = true;
+        }
+        
+        List<MethodCallExpr> deletes = rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("delete") && !mce.getScope().isPresent() ).collect(Collectors.toList());
+        if (!deletes.isEmpty()) {
+            rewrote = true;
+            deletes.forEach( mce -> mce.setScope(new NameExpr("drools")) );
+        }
+        if (rhs.getChildNodesByType(MethodCallExpr.class).stream().filter(mce -> mce.getNameAsString().equals("delete")).findAny().isPresent()) {
+            rewrote = true;
+        }
+        
+        return rewrote;
     }
 
     private static void visit( RuleContext context, BaseDescr descr ) {
@@ -310,7 +339,7 @@ public class ModelGenerator {
                                        .flatMap( x -> optToStream( x ) )
                                        .findFirst().get();
             
-            ClassExpr indexedBy_indexedClass = new ClassExpr( new ClassOrInterfaceType( indexType.getCanonicalName() ) );
+            ClassExpr indexedBy_indexedClass = new ClassExpr( JavaParser.parseType( indexType.getCanonicalName() ) );
             FieldAccessExpr indexedBy_constraintType = new FieldAccessExpr( new NameExpr( "org.drools.model.Index.ConstraintType" ), decodeConstraintType.toString()); // not 100% accurate as the type in "nameExpr" is actually parsed if it was JavaParsers as a big chain of FieldAccessExpr
             LambdaExpr indexedBy_leftOperandExtractor = new LambdaExpr();
             indexedBy_leftOperandExtractor.addParameter(new Parameter(new UnknownType(), "_this"));

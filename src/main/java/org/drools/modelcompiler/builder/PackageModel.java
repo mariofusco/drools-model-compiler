@@ -16,8 +16,11 @@
 
 package org.drools.modelcompiler.builder;
 
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
@@ -33,6 +36,8 @@ import org.drools.model.Model;
 public class PackageModel {
 
     private final String name;
+    
+    private Set<String> imports = new HashSet<>();
 
     private Map<String, MethodDeclaration> ruleMethods = new HashMap<>();
 
@@ -42,6 +47,10 @@ public class PackageModel {
 
     public String getName() {
         return name;
+    }
+    
+    public void addImports(Collection<String> imports) {
+        this.imports.addAll(imports);
     }
     
     public void putRuleMethod(String methodName, MethodDeclaration ruleMethod) {
@@ -65,10 +74,18 @@ public class PackageModel {
         cu.addImport(JavaParser.parseImport("import static org.drools.model.DSL.*;"        ));
         cu.addImport(JavaParser.parseImport("import org.drools.model.Index.ConstraintType;"));
         
+        // imports from DRL:
+        for ( String i : imports ) {
+            if ( i.equals(name+".*") ) {
+                break; // skip same-package star import.
+            }
+            cu.addImport(JavaParser.parseImport("import "+i+";"));
+        }
+        
         ClassOrInterfaceDeclaration rulesClass = cu.addClass("Rules");
         rulesClass.addImplementedType(Model.class);
 
-        BodyDeclaration<?> getRulesMethod = JavaParser.parseClassBodyDeclaration(
+        BodyDeclaration<?> getRulesMethod = JavaParser.parseBodyDeclaration(
                 "    @Override\n" +
                 "    public List<Rule> getRules() {\n" +
                 "        return rules;\n" +
@@ -76,14 +93,14 @@ public class PackageModel {
                 );
         rulesClass.addMember(getRulesMethod);
         
-        BodyDeclaration<?> getGlobalsMethod = JavaParser.parseClassBodyDeclaration(
+        BodyDeclaration<?> getGlobalsMethod = JavaParser.parseBodyDeclaration(
                 "    @Override\n" +
                 "    public List<Global> getGlobals() {\n" +
                 "        return Collections.emptyList();\n" +
                 "    }\n");
         rulesClass.addMember(getGlobalsMethod);
         
-        BodyDeclaration<?> rulesList = JavaParser.parseClassBodyDeclaration("List<Rule> rules = new ArrayList<>();");
+        BodyDeclaration<?> rulesList = JavaParser.parseBodyDeclaration("List<Rule> rules = new ArrayList<>();");
         rulesClass.addMember(rulesList);
         // end of fixed part
         
@@ -109,6 +126,7 @@ public class PackageModel {
     public void print() {
         System.out.println("=====");
         System.out.println("PackageModel "+name);
+        System.out.println("    imports: "+imports);
         System.out.println(getRulesSource());
         System.out.println("=====");
     }
@@ -170,5 +188,7 @@ public class PackageModel {
                "    }\n" +
                "}\n";
     }
+
+
 
 }

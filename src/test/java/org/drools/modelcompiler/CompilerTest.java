@@ -16,9 +16,13 @@
 
 package org.drools.modelcompiler;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
 import java.io.File;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
@@ -39,9 +43,6 @@ import org.kie.api.builder.model.KieModuleModel;
 import org.kie.api.builder.model.KieSessionModel;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class CompilerTest {
@@ -67,6 +68,14 @@ public class CompilerTest {
 
     public static class Result {
         private Object value;
+        
+        public Result() {
+            // empty constructor.
+        }
+        
+        public Result(Object value) {
+            this.value = value;
+        }
 
         public Object getValue() {
             return value;
@@ -241,5 +250,82 @@ public class CompilerTest {
         ksession.fireAllRules();
 
         assertEquals( "Found: Mark", result.getValue() );
+    }
+   
+    public static <T> List<T> getObjects(KieSession ksession, Class<T> clazz) {
+        return (List<T>) ksession.getObjects(clazz::isInstance).stream().collect(Collectors.toList());
+    }
+    
+    @Test
+    public void testSimpleInsert() {
+        String str =
+                "import " + Result.class.getCanonicalName() + ";" +
+                "import " + Person.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $p : Person( name.length == 4 )\n" +
+                "then\n" +
+                "  Result r = new Result($p.getName());" +
+                "  insert(r);\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Mario", 40));
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("Mark", results.get(0).getValue());
+    }
+    
+    @Test
+    public void testSimpleDelete() {
+        String str =
+                "import " + Result.class.getCanonicalName() + ";" +
+                "import " + Person.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $p : Person( name.length == 4 )\n" +
+                "then\n" +
+                "  Result r = new Result($p.getName());" +
+                "  insert(r);\n" +
+                "  delete($p);\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Mario", 40));
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("Mark", results.get(0).getValue());
+        assertEquals(1, getObjects(ksession, Person.class).size());
+    }
+    
+    @Test
+    public void testSimpleInsertDeleteExplicitScope() {
+        String str =
+                "import " + Result.class.getCanonicalName() + ";" +
+                "import " + Person.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $p : Person( name.length == 4 )\n" +
+                "then\n" +
+                "  Result r = new Result($p.getName());" +
+                "  drools.insert(r);\n" +
+                "  drools.delete($p);\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Mario", 40));
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("Mark", results.get(0).getValue());
+        assertEquals(1, getObjects(ksession, Person.class).size());
     }
 }
