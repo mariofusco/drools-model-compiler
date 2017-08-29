@@ -16,7 +16,11 @@
 
 package org.drools.modelcompiler.consequence;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.drools.core.WorkingMemory;
+import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.reteoo.RuleTerminalNode;
@@ -24,8 +28,15 @@ import org.drools.core.rule.Declaration;
 import org.drools.core.spi.Consequence;
 import org.drools.core.spi.KnowledgeHelper;
 import org.drools.core.spi.Tuple;
+import org.drools.model.BitMask;
 import org.drools.model.Drools;
 import org.drools.model.Variable;
+import org.drools.model.bitmask.AllSetBitMask;
+import org.drools.model.bitmask.AllSetButLastBitMask;
+import org.drools.model.bitmask.EmptyBitMask;
+import org.drools.model.bitmask.EmptyButLastBitMask;
+import org.drools.model.bitmask.LongBitMask;
+import org.drools.model.bitmask.OpenBitSet;
 import org.drools.model.functions.FunctionN;
 import org.drools.modelcompiler.RuleContext;
 
@@ -56,7 +67,7 @@ public class LambdaConsequence implements Consequence {
         if (consequence.isUsingDrools()) {
             factsOffset++;
             facts = new Object[vars.length + 1];
-            facts[0] = new DroolsImpl(knowledgeHelper);
+            facts[0] = new DroolsImpl(knowledgeHelper, workingMemory);
         } else {
             facts = new Object[vars.length];
         }
@@ -65,7 +76,11 @@ public class LambdaConsequence implements Consequence {
         for (Variable var : vars) {
             if ( var.isFact() ) {
                 Declaration declaration = declarations[declrCounter++];
-                facts[factsOffset++] = declaration.getValue( (InternalWorkingMemory) workingMemory, tuple.get( declaration ).getObject() );
+                InternalFactHandle fh = tuple.get( declaration );
+                if (consequence.isUsingDrools()) {
+                    ( (DroolsImpl) facts[0] ).registerFactHandle( fh );
+                }
+                facts[factsOffset++] = declaration.getValue( (InternalWorkingMemory) workingMemory, fh.getObject() );
             } else {
                 facts[factsOffset++] = workingMemory.getGlobal( var.getName() );
             }
@@ -94,25 +109,60 @@ public class LambdaConsequence implements Consequence {
 
     public static class DroolsImpl implements Drools {
         private final KnowledgeHelper knowledgeHelper;
+        private final WorkingMemory workingMemory;
 
-        DroolsImpl(KnowledgeHelper knowledgeHelper) {
+        private final Map<Object, InternalFactHandle> fhLookup = new HashMap<>();
+
+        DroolsImpl(KnowledgeHelper knowledgeHelper, WorkingMemory workingMemory) {
+            this.workingMemory = workingMemory;
             this.knowledgeHelper = knowledgeHelper;
         }
 
         @Override
         public void insert(Object object) {
-            knowledgeHelper.insert(object);
+            workingMemory.insert(object);
         }
 
         @Override
-        public void update(Object object) {
-            knowledgeHelper.update(object);
+        public void update(Object object, String... modifiedProperties) {
+            workingMemory.update( fhLookup.get(object), object, modifiedProperties );
+        }
+
+        @Override
+        public void update(Object object, BitMask modifiedProperties ) {
+            Class<?> modifiedClass = modifiedProperties.getPatternClass();
+            knowledgeHelper.update( fhLookup.get(object), adaptBitMask(modifiedProperties), modifiedClass);
         }
 
         @Override
         public void delete(Object object) {
-            knowledgeHelper.delete(object);
+            workingMemory.delete( fhLookup.get(object) );
+        }
+
+        void registerFactHandle(InternalFactHandle fh) {
+            fhLookup.put( fh.getObject(), fh );
         }
     }
 
+    private static org.drools.core.util.bitmask.BitMask adaptBitMask(BitMask mask) {
+        if (mask instanceof LongBitMask) {
+            return new org.drools.core.util.bitmask.LongBitMask( ( (LongBitMask) mask ).asLong() );
+        }
+        if (mask instanceof EmptyBitMask) {
+            return org.drools.core.util.bitmask.EmptyBitMask.get();
+        }
+        if (mask instanceof AllSetBitMask) {
+            return org.drools.core.util.bitmask.AllSetBitMask.get();
+        }
+        if (mask instanceof AllSetButLastBitMask) {
+            return org.drools.core.util.bitmask.AllSetButLastBitMask.get();
+        }
+        if (mask instanceof EmptyButLastBitMask) {
+            return org.drools.core.util.bitmask.EmptyButLastBitMask.get();
+        }
+        if (mask instanceof OpenBitSet) {
+            return new org.drools.core.util.bitmask.OpenBitSet( ( (OpenBitSet) mask ).getBits(), ( (OpenBitSet) mask ).getNumWords() );
+        }
+        throw new IllegalArgumentException( "Unknown bitmask: " + mask );
+    }
 }

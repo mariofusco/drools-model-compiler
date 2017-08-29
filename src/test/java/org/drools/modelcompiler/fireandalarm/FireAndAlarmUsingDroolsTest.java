@@ -1,5 +1,6 @@
 package org.drools.modelcompiler.fireandalarm;
 
+import org.drools.model.BitMask;
 import org.drools.model.Model;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
@@ -30,8 +31,6 @@ public class FireAndAlarmUsingDroolsTest {
 
         Rule r1 = rule("When there is a fire turn on the sprinkler")
                 .view(
-                        input(fire),
-                        input(sprinkler),
                         expr(sprinkler, s -> !s.isOn()),
                         expr(sprinkler, fire, (s, f) -> s.getRoom().equals(f.getRoom()))
                      )
@@ -40,15 +39,15 @@ public class FireAndAlarmUsingDroolsTest {
                                 .execute((drools, s) -> {
                                     System.out.println("Turn on the sprinkler for room " + s.getRoom().getName());
                                     s.setOn(true);
-                                    drools.update(s);
+                                    drools.update(s, "on");
                                 })
                      );
 
+        BitMask r2_mask1 = BitMask.getPatternMask( Sprinkler.class, "on" );
+
         Rule r2 = rule("When the fire is gone turn off the sprinkler")
                 .view(
-                        input(sprinkler),
                         expr(sprinkler, Sprinkler::isOn),
-                        input(fire),
                         not(fire, sprinkler, (f, s) -> f.getRoom().equals(s.getRoom()))
                      )
                 .then(
@@ -56,13 +55,12 @@ public class FireAndAlarmUsingDroolsTest {
                                 .execute((drools, s) -> {
                                     System.out.println("Turn off the sprinkler for room " + s.getRoom().getName());
                                     s.setOn(false);
-                                    drools.update(s);
+                                    drools.update(s, r2_mask1);
                                 })
                      );
 
         Rule r3 = rule("Raise the alarm when we have one or more fires")
                 .view(
-                        input(fire),
                         exists(fire)
                      )
                 .then(
@@ -74,9 +72,7 @@ public class FireAndAlarmUsingDroolsTest {
 
         Rule r4 = rule("Lower the alarm when all the fires have gone")
                 .view(
-                        input(fire),
-                        not(fire),
-                        input(alarm)
+                        not(fire)
                      )
                 .then(
                         on(alarm)
@@ -88,9 +84,7 @@ public class FireAndAlarmUsingDroolsTest {
 
         Rule r5 = rule("Status output when things are ok")
                 .view(
-                        input(alarm),
                         not(alarm),
-                        input(sprinkler),
                         not(sprinkler, Sprinkler::isOn)
                      )
                 .then(
