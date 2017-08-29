@@ -352,4 +352,27 @@ public class CompilerTest {
         assertEquals( 38, mark.getAge() );
         assertEquals( 40, mario.getAge() );
     }
+
+    @Test
+    public void testSimpleModify() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $p : Person( name.length == 4 )\n" +
+                "then\n" +
+                "  modify($p) { setAge($p.getAge()+1) }\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mark = new Person("Mark", 37);
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mark);
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        assertEquals( 38, mark.getAge() );
+        assertEquals( 40, mario.getAge() );
+    }
 }

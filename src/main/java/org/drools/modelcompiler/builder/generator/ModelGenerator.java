@@ -123,9 +123,9 @@ public class ModelGenerator {
              
             MethodCallExpr viewCall = new MethodCallExpr(ruleCall, "view");
             viewCall.addArgument(context.expression);
-            
-            String ruleConsequenceAsBlock = "{" + ruleDescr.getConsequence().toString().trim() + "}";
-            BlockStmt ruleConsequence = JavaParser.parseBlock( ruleConsequenceAsBlock );
+
+            String ruleConsequenceAsBlock = rewriteConsequenceBlock( context, ruleDescr.getConsequence().toString().trim() );
+            BlockStmt ruleConsequence = JavaParser.parseBlock( "{" + ruleConsequenceAsBlock + "}" );
             List<String> declUsedInRHS = ruleConsequence.getChildNodesByType(NameExpr.class).stream().map(NameExpr::getNameAsString).collect(Collectors.toList());
             List<String> verifiedDeclUsedInRHS = context.declarations.keySet().stream().filter(declUsedInRHS::contains).collect(Collectors.toList());
             
@@ -157,6 +157,50 @@ public class ModelGenerator {
 
         packageModel.print();
         return packageModel;
+    }
+
+    private static String rewriteConsequenceBlock( RuleContext context, String consequence ) {
+        int modifyPos = consequence.indexOf( "modify" );
+        if (modifyPos < 0) {
+            return consequence;
+        }
+
+        int lastCopiedEnd = 0;
+        StringBuilder sb = new StringBuilder();
+        sb.append( consequence.substring( lastCopiedEnd, modifyPos ) );
+
+        for (; modifyPos >= 0; modifyPos = consequence.indexOf( "modify", modifyPos+6 )) {
+            int declStart = consequence.indexOf( '(', modifyPos+6 );
+            int declEnd = consequence.indexOf( ')', declStart+1 );
+            if (declEnd < 0) {
+                continue;
+            }
+            String decl = consequence.substring( declStart+1, declEnd ).trim();
+            if ( context.declarations.get( decl ) == null) {
+                continue;
+            }
+            int blockStart = consequence.indexOf( '{', declEnd+1 );
+            int blockEnd = consequence.indexOf( '}', blockStart+1 );
+            if (blockEnd < 0) {
+                continue;
+            }
+
+            if (lastCopiedEnd < modifyPos) {
+                sb.append( consequence.substring( lastCopiedEnd, modifyPos ) );
+            }
+            String block = consequence.substring( blockStart+1, blockEnd ).trim();
+            for (String blockStatement : block.split( ";" )) {
+                sb.append( decl ).append( "." ).append( blockStatement.trim() ).append( ";\n" );
+            }
+            sb.append( "update(" ).append( decl ).append( ");\n" );
+            lastCopiedEnd = blockEnd+1;
+        }
+
+        if (lastCopiedEnd < consequence.length()) {
+            sb.append( consequence.substring( lastCopiedEnd ) );
+        }
+
+        return sb.toString();
     }
 
     private static boolean rewriteRHS(RuleContext context, BlockStmt ruleBlock, BlockStmt rhs) {
