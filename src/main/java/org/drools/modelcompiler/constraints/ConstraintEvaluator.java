@@ -7,14 +7,16 @@ import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.Pattern;
 import org.drools.core.spi.Tuple;
+import org.drools.core.time.Interval;
 import org.drools.model.Index;
 import org.drools.model.SingleConstraint;
 
 public class ConstraintEvaluator {
 
+    protected final SingleConstraint constraint;
+
     private final Declaration[] declarations;
     private final Pattern pattern;
-    private final SingleConstraint constraint;
     private int[] argsPos;
 
     public ConstraintEvaluator(Declaration[] declarations, Pattern pattern, SingleConstraint constraint) {
@@ -44,17 +46,30 @@ public class ConstraintEvaluator {
     }
 
     private Object[] getBetaInvocationArgs( InternalFactHandle handle, Tuple tuple ) {
+        initArgsPos();
+        Object[] params = new Object[argsPos.length];
+        for (int i = 0; i < params.length; i++) {
+            params[i] = argsPos[i] >= 0 ? tuple.getObject(argsPos[i]) : handle.getObject();
+        }
+        return params;
+    }
+
+    protected InternalFactHandle[] getBetaInvocationFactHandles( InternalFactHandle handle, Tuple tuple ) {
+        initArgsPos();
+        InternalFactHandle[] fhs = new InternalFactHandle[argsPos.length];
+        for (int i = 0; i < fhs.length; i++) {
+            fhs[i] = argsPos[i] >= 0 ? tuple.get(argsPos[i]) : handle;
+        }
+        return fhs;
+    }
+
+    private void initArgsPos() {
         if (this.argsPos == null) {
             this.argsPos = Stream.of( declarations )
                                  .map( Declaration::getPattern )
                                  .mapToInt( p -> p.getDeclaration().getIdentifier().equals( pattern.getDeclaration().getIdentifier() ) ? -1 : p.getOffset() )
                                  .toArray();
         }
-        Object[] params = new Object[argsPos.length];
-        for (int i = 0; i < params.length; i++) {
-            params[i] = argsPos[i] >= 0 ? tuple.getObject(argsPos[i]) : handle.getObject();
-        }
-        return params;
     }
 
     public Index getIndex() {
@@ -100,5 +115,13 @@ public class ConstraintEvaluator {
                                               .toArray(Declaration[]::new),
                                         pattern,
                                         constraint );
+    }
+
+    public boolean isTemporal() {
+        return false;
+    }
+
+    public Interval getInterval() {
+        throw new UnsupportedOperationException();
     }
 }

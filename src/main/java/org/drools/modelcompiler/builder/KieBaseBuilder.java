@@ -26,6 +26,7 @@ import org.drools.model.Model;
 import org.drools.modelcompiler.KiePackagesBuilder;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.KieServices;
+import org.kie.api.conf.KieBaseOption;
 import org.kie.api.definition.KiePackage;
 
 public class KieBaseBuilder {
@@ -36,6 +37,10 @@ public class KieBaseBuilder {
 
     public KieBaseBuilder() {
         this(null, KieBaseBuilder.class.getClassLoader(), null);
+    }
+
+    public KieBaseBuilder(KieBaseConfiguration conf) {
+        this(null, KieBaseBuilder.class.getClassLoader(), conf);
     }
 
     public KieBaseBuilder(KieBaseModelImpl kBaseModel, ClassLoader cl, KieBaseConfiguration conf) {
@@ -73,7 +78,15 @@ public class KieBaseBuilder {
         return kbConf;
     }
 
-    public static InternalKnowledgeBase createKieBaseFromModel( Model model ) {
-        return new KieBaseBuilder().addModel( model ).createKieBase();
+    public static InternalKnowledgeBase createKieBaseFromModel( Model model, KieBaseOption... options ) {
+        if (options == null || options.length == 0) {
+            return new KieBaseBuilder().addModel( model ).createKieBase();
+        }
+
+        KieBaseConfiguration kieBaseConf = KieServices.get().newKieBaseConfiguration();
+        for (KieBaseOption option : options) {
+            kieBaseConf.setOption(option);
+        }
+        return new KieBaseBuilder(kieBaseConf).addModel( model ).createKieBase();
     }
 }

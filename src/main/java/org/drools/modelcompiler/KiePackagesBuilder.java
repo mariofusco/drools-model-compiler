@@ -49,19 +49,22 @@ import org.drools.model.AccumulatePattern;
 import org.drools.model.Condition;
 import org.drools.model.Consequence;
 import org.drools.model.Constraint;
+import org.drools.model.Global;
 import org.drools.model.Model;
 import org.drools.model.OOPath;
 import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
 import org.drools.model.View;
-import org.drools.model.Global;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
 import org.drools.modelcompiler.constraints.LambdaAccumulator;
 import org.drools.modelcompiler.constraints.LambdaConstraint;
+import org.drools.modelcompiler.constraints.TemporalConstraintEvaluator;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.definition.KiePackage;
+import org.kie.api.definition.type.Role;
+import org.kie.api.definition.type.Role.Type;
 
 import static org.drools.core.rule.Pattern.getReadAcessor;
 import static org.drools.model.DSL.type;
@@ -174,8 +177,8 @@ public class KiePackagesBuilder {
             }
             case ACCUMULATE: {
                 Pattern source = buildPattern( ctx, condition );
-                Pattern pattern = new Pattern( 0, new ClassObjectType( Object.class ) );
-                pattern.setSource( buildAccumulate( ctx, (AccumulatePattern) condition, source, pattern ) );
+                Pattern pattern = new Pattern( 0, getObjectType( Object.class ) );
+                pattern.setSource( buildAccumulate( (AccumulatePattern) condition, source, pattern ) );
                 return pattern;
             }
             case OOPATH: {
@@ -195,12 +198,12 @@ public class KiePackagesBuilder {
         return pattern;
     }
 
-    private Accumulate buildAccumulate( RuleContext ctx, AccumulatePattern accPattern, Pattern source, Pattern pattern ) {
+    private Accumulate buildAccumulate( AccumulatePattern accPattern, Pattern source, Pattern pattern ) {
         AccumulateFunction<?, ?, ?>[] accFunc = accPattern.getFunctions();
 
         if (accFunc.length == 1) {
             pattern.addDeclaration( new Declaration(accPattern.getBoundVariables()[0].getName(),
-                                                    getReadAcessor( new ClassObjectType( Object.class ) ),
+                                                    getReadAcessor( getObjectType( Object.class ) ),
                                                     pattern,
                                                     true) );
             return new SingleAccumulate( source, new Declaration[0], new LambdaAccumulator( accPattern.getFunctions()[0]));
@@ -224,7 +227,7 @@ public class KiePackagesBuilder {
         patternClasses.add( patternClass );
         Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
                                        0, // offset will be set by ReteooBuilder
-                                       new ClassObjectType( patternClass ),
+                                       getObjectType( patternClass ),
                                        patternVariable.getName(),
                                        true );
         ctx.registerPattern( patternVariable, pattern );
@@ -235,11 +238,15 @@ public class KiePackagesBuilder {
         if (constraint.getType() == Constraint.Type.SINGLE) {
             SingleConstraint singleConstraint = (SingleConstraint) constraint;
             Declaration[] declarations = getRequiredDeclaration(ctx, singleConstraint);
-            ConstraintEvaluator constraintEvaluator = new ConstraintEvaluator( declarations, pattern, singleConstraint );
+
             if (singleConstraint.getVariables().length > 0) {
+                ConstraintEvaluator constraintEvaluator = singleConstraint.isTemporal() ?
+                                                          new TemporalConstraintEvaluator( declarations, pattern, singleConstraint ) :
+                                                          new ConstraintEvaluator( declarations, pattern, singleConstraint );
                 pattern.addConstraint( new LambdaConstraint( constraintEvaluator ) );
                 addFieldsToPatternWatchlist( pattern, singleConstraint.getReactiveProps() );
             }
+
         } else if (modelPattern.getConstraint().getType() == Constraint.Type.AND) {
             for (Constraint child : constraint.getChildren()) {
                 addConstraintsToPattern(ctx, pattern, modelPattern, child);
@@ -266,7 +273,7 @@ public class KiePackagesBuilder {
                 declarations[i] = ctx.getPattern( vars[i] ).getDeclaration();
             } else {
                 Global global = ( (Global) vars[i] );
-                ClassObjectType objectType = new ClassObjectType( global.getType().asClass() );
+                ClassObjectType objectType = getObjectType( global.getType().asClass() );
                 InternalReadAccessor globalExtractor = new GlobalExtractor( global.getName(), objectType);
                 declarations[i] = new Declaration( global.getName(), globalExtractor, new Pattern( 0, objectType ) );
             }
@@ -276,5 +283,15 @@ public class KiePackagesBuilder {
 
     public Collection<KiePackage> getKnowledgePackages() {
         return packages.values();
+    }
+
+    private Map<Class<?>, ClassObjectType> objectTypeCache = new HashMap<>();
+    private ClassObjectType getObjectType( Class<?> patternClass ) {
+        return objectTypeCache.computeIfAbsent( patternClass, c -> new ClassObjectType( c, isEvent( c ) ) );
+    }
+
+    private boolean isEvent( Class<?> patternClass ) {
+        Role role = patternClass.getAnnotation( Role.class );
+        return role != null && role.value() == Type.EVENT;
     }
 }

@@ -8,11 +8,13 @@ import org.drools.core.reteoo.PropertySpecificUtil;
 import org.drools.core.rule.ContextEntry;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.IndexableConstraint;
+import org.drools.core.rule.IntervalProviderConstraint;
 import org.drools.core.rule.MutableTypeConstraint;
 import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.FieldValue;
 import org.drools.core.spi.InternalReadAccessor;
 import org.drools.core.spi.Tuple;
+import org.drools.core.time.Interval;
 import org.drools.core.util.AbstractHashTable.FieldIndex;
 import org.drools.core.util.bitmask.BitMask;
 import org.drools.core.util.index.IndexUtil;
@@ -22,7 +24,7 @@ import org.drools.model.Index;
 import static org.drools.core.reteoo.PropertySpecificUtil.getEmptyPropertyReactiveMask;
 import static org.drools.core.rule.constraint.MvelConstraint.INDEX_EVALUATOR;
 
-public class LambdaConstraint extends MutableTypeConstraint implements IndexableConstraint {
+public class LambdaConstraint extends MutableTypeConstraint implements IndexableConstraint, IntervalProviderConstraint {
 
     private final ConstraintEvaluator evaluator;
 
@@ -83,7 +85,12 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
 
     @Override
     public boolean isTemporal() {
-        throw new UnsupportedOperationException();
+        return evaluator.isTemporal();
+    }
+
+    @Override
+    public Interval getInterval() {
+        return evaluator.getInterval();
     }
 
     @Override
