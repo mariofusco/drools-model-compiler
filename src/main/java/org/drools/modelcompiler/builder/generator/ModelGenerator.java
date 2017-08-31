@@ -83,6 +83,8 @@ public class ModelGenerator {
 
     private static final ClassOrInterfaceType RULE_TYPE = JavaParser.parseClassOrInterfaceType( Rule.class.getCanonicalName() );
     private static final ClassOrInterfaceType BITMASK_TYPE = JavaParser.parseClassOrInterfaceType( BitMask.class.getCanonicalName() );
+    
+    public static final boolean GENERATE_EXPR_ID = true;
 
     public static PackageModel generateModel( InternalKnowledgePackage pkg, List<RuleDescrImpl> rules ) {
         String name = pkg.getName();
@@ -90,7 +92,7 @@ public class ModelGenerator {
         packageModel.addImports(pkg.getTypeResolver().getImports());
         for ( RuleDescrImpl descr : rules ) {
             RuleDescr ruleDescr = descr.getDescr();
-            RuleContext context = new RuleContext( pkg );
+            RuleContext context = new RuleContext( pkg, packageModel.getExprIdGenerator() );
 //            visit(context, descr.getImpl().getLhs());
             visit(context, ruleDescr.getLhs());
 
@@ -357,7 +359,12 @@ public class ModelGenerator {
             combo = new BinaryExpr( left.getPrefixExpression(), combo, Operator.AND );
         }
 
-        return buildDslExpression( Collections.emptyList(), bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo );
+        String exprId = null;
+        if ( GENERATE_EXPR_ID ) {
+            exprId = context.getExprId(patternType, expression);    
+        }
+        
+        return buildDslExpression( Collections.emptyList(), exprId, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo );
     }
 
     private static Expression mvelParse(RuleContext context, Pattern pattern, String bindingId, String expression) {
@@ -393,14 +400,17 @@ public class ModelGenerator {
                 combo = left.getExpressionAsString() + " " + relationalExprDescr.getOperator() + " " + right.getExpressionAsString();
         }
 
-        return buildDslExpression( Collections.emptyList(), bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ) );
+        return buildDslExpression( Collections.emptyList(), null, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ) );
     }
 
-    private static Expression buildDslExpression( Collection<String> listenedProperties, String bindingId, ConstraintType decodeConstraintType,
+    private static Expression buildDslExpression( Collection<String> listenedProperties, String exprId, String bindingId, ConstraintType decodeConstraintType,
                                                   Set<String> usedDeclarations, Set<String> reactOnProperties,
                                                   TypedExpression left, TypedExpression right, Expression combo ) {
         
         MethodCallExpr exprDSL = new MethodCallExpr(null, "expr");
+        if (exprId != null && !"".equals(exprId)) {
+            exprDSL.addArgument( new StringLiteralExpr(exprId) );
+        }
         exprDSL.addArgument( new NameExpr("var_" + bindingId) );
         usedDeclarations.stream().map( x -> new NameExpr( "var_" + x )).forEach(exprDSL::addArgument);
         
@@ -471,9 +481,11 @@ public class ModelGenerator {
 
     public static class RuleContext {
         private final InternalKnowledgePackage pkg;
+        private DRLExprIdGenerator exprIdGenerator;
 
-        public RuleContext( InternalKnowledgePackage pkg ) {
+        public RuleContext( InternalKnowledgePackage pkg, DRLExprIdGenerator exprIdGenerator ) {
             this.pkg = pkg;
+            this.exprIdGenerator = exprIdGenerator;
         }
 
         Map<String, Class<?>> declarations = new HashMap<>();
@@ -496,6 +508,10 @@ public class ModelGenerator {
 
         public InternalKnowledgePackage getPkg() {
             return pkg;
+        }
+        
+        public String getExprId(Class<?> patternType, String drlConstraint) {
+            return exprIdGenerator.getExprId(patternType, drlConstraint);
         }
     }
 }

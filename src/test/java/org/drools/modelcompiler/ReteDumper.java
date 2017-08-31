@@ -20,26 +20,28 @@ public class ReteDumper {
 
     private ReteDumper() { }
 
-    public static void dumpRete(KieBase kbase ) {
-        dumpRete((InternalKnowledgeBase) kbase);
+    public static Set<BaseNode> dumpRete(KieBase kbase ) {
+        return dumpRete((InternalKnowledgeBase) kbase);
     }
 
-    public static void dumpRete(KieRuntime session ) {
-        dumpRete((InternalKnowledgeBase)session.getKieBase());
+    public static Set<BaseNode> dumpRete(KieRuntime session ) {
+        return dumpRete((InternalKnowledgeBase)session.getKieBase());
     }
 
-    public static void dumpRete(KieSession session) {
-        dumpRete((InternalKnowledgeBase)session.getKieBase());
+    public static Set<BaseNode> dumpRete(KieSession session) {
+        return dumpRete((InternalKnowledgeBase)session.getKieBase());
     }
 
-    public static void dumpRete(InternalKnowledgeBase kBase) {
-        dumpRete(kBase.getRete());
+    public static Set<BaseNode> dumpRete(InternalKnowledgeBase kBase) {
+        return dumpRete(kBase.getRete());
     }
 
-    public static void dumpRete(Rete rete) {
+    public static Set<BaseNode> dumpRete(Rete rete) {
+        HashSet<BaseNode> visitedNodes = new HashSet<BaseNode>();
         for (EntryPointNode entryPointNode : rete.getEntryPointNodes().values()) {
-            dumpNode( entryPointNode, "", new HashSet<BaseNode>() );
+            dumpNode( entryPointNode, "", visitedNodes );
         }
+        return visitedNodes;
     }
 
     private static void dumpNode(BaseNode node, String ident, Set<BaseNode> visitedNodes ) {

@@ -17,13 +17,17 @@
 package org.drools.modelcompiler;
 
 import java.io.File;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
+import org.drools.core.reteoo.AlphaNode;
 import org.drools.modelcompiler.builder.CanonicalModelKieProject;
+import org.drools.modelcompiler.builder.generator.ModelGenerator;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -42,6 +46,7 @@ import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
@@ -110,6 +115,43 @@ public class CompilerTest {
         ksession.fireAllRules();
 
         assertEquals( "Mario is older than Mark", result.getValue() );
+    }
+    
+    @Test
+    public void testShareAlpha() {
+        String str =
+                "import " + Result.class.getCanonicalName() + ";" +
+                "import " + Person.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $r : java.util.Set()\n" +
+                "  $p1 : Person(name == \"Edson\")\n" +
+                "  $p2 : Person(name != \"Edson\", age > $p1.age)\n" +
+                "  $p3 : Person(name != \"Edson\", age > $p1.age, this != $p2)\n" +
+                "then\n" +
+                "  $r.add($p2);\n" +
+                "  $r.add($p3);\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Set result = new HashSet<>();
+        ksession.insert(result);
+
+        Person mark = new Person("Mark", 37);
+        Person edson = new Person("Edson", 35);
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mark);
+        ksession.insert(edson);
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        assertTrue(result.contains(mark));
+        assertTrue(result.contains(mario));
+        
+        // Alpha node "name != Edson" should be shared between 3rd and 4th pattern.
+        // therefore alpha nodes should be a total of 2: name == Edson, name != Edson
+        assertEquals(2, ReteDumper.dumpRete(ksession).stream().filter(AlphaNode.class::isInstance).count());
     }
 
     @Test
