@@ -27,6 +27,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -208,7 +209,7 @@ public class ModelGenerator {
         List<MethodCallExpr> updateExprs = new ArrayList<>();
 
         boolean hasWMAs = methodCallExprs.stream()
-           .filter(mce -> isWMAMethod( mce ) )
+           .filter( ModelGenerator::isWMAMethod )
            .peek( mce -> {
                 if (!mce.getScope().isPresent()) {
                     mce.setScope(new NameExpr("drools"));
@@ -231,7 +232,7 @@ public class ModelGenerator {
                 methodCallExprs.subList( 0, methodCallExprs.indexOf( updateExpr ) ).stream()
                                .filter( mce -> mce.getScope().isPresent() && hasScope( mce, updatedVar ) )
                                .map( mce -> ClassUtils.setter2property( mce.getNameAsString() ) )
-                               .filter( o -> o != null )
+                               .filter( Objects::nonNull )
                                .distinct()
                                .forEach( s -> bitMaskCreation.addArgument( new StringLiteralExpr( s ) ) );
 
@@ -277,7 +278,7 @@ public class ModelGenerator {
     private static void visit( RuleContext context, AndDescr descr ) {
         final MethodCallExpr andDSL = new MethodCallExpr(null, "and");
         context.addExpression(andDSL);
-        context.pushExprPointer( e -> andDSL.addArgument( e ));
+        context.pushExprPointer( andDSL::addArgument );
         for (BaseDescr subDescr : descr.getDescrs()) {
             visit( context, subDescr );
         }
@@ -287,7 +288,7 @@ public class ModelGenerator {
     private static void visit( RuleContext context, OrDescr descr ) {
         final MethodCallExpr orDSL = new MethodCallExpr(null, "or");
         context.addExpression(orDSL);
-        context.pushExprPointer( e -> orDSL.addArgument( e ));
+        context.pushExprPointer( orDSL::addArgument );
         for (BaseDescr subDescr : descr.getDescrs()) {
             visit( context, subDescr );
         }
@@ -418,7 +419,7 @@ public class ModelGenerator {
         // .indexBy(..) is only added if left is not an identity expression:
         if ( !(left.getExpression() instanceof NameExpr && ((NameExpr)left.getExpression()).getName().getIdentifier().equals("_this")) ) {
             Class<?> indexType = Stream.of( left, right ).map( TypedExpression::getType )
-                                       .flatMap( x -> optToStream( x ) )
+                                       .flatMap( ModelGenerator::optToStream )
                                        .findFirst().get();
             
             ClassExpr indexedBy_indexedClass = new ClassExpr( JavaParser.parseType( indexType.getCanonicalName() ) );
@@ -465,10 +466,7 @@ public class ModelGenerator {
      * waiting for java 9 Optional improvement
      */
     static <T> Stream<T> optToStream(Optional<T> opt) {
-        if (opt.isPresent())
-            return Stream.of(opt.get());
-        else
-            return Stream.empty();
+        return opt.map( Stream::of ).orElseGet( Stream::empty );
     }
 
     public static class RuleContext {

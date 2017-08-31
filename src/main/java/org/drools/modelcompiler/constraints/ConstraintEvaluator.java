@@ -16,6 +16,7 @@ public class ConstraintEvaluator {
     protected final SingleConstraint constraint;
 
     private final Declaration[] declarations;
+    private final Declaration[] requiredDeclarations;
     private final Pattern pattern;
     private int[] argsPos;
 
@@ -23,6 +24,9 @@ public class ConstraintEvaluator {
         this.constraint = constraint;
         this.declarations = declarations;
         this.pattern = pattern;
+        this.requiredDeclarations = Stream.of( declarations )
+                                          .filter( d -> !d.getIdentifier().equals( pattern.getDeclaration().getIdentifier() ) )
+                                          .toArray( Declaration[]::new );
     }
 
     public boolean evaluate( InternalFactHandle handle, InternalWorkingMemory workingMemory ) {
@@ -97,7 +101,7 @@ public class ConstraintEvaluator {
     }
 
     public Declaration[] getRequiredDeclarations() {
-        return declarations;
+        return requiredDeclarations;
     }
 
     public void replaceDeclaration(Declaration oldDecl, Declaration newDecl) {

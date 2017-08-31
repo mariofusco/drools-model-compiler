@@ -43,7 +43,7 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
             // TODO LambdaReadAccessor.index ???
             readAccessor = new LambdaReadAccessor( 0, index.getIndexedClass(), index.getLeftOperandExtractor() );
             if (index instanceof BetaIndex) {
-                indexingDeclaration = evaluator.getRequiredDeclarations()[1];
+                indexingDeclaration = evaluator.getRequiredDeclarations()[0];
             }
         }
     }

@@ -187,6 +187,13 @@ public class KiePackagesBuilder {
                 pattern.setSource( new EntryPointId( ctx.getRule().getRuleUnitClassName() + "." + ooPath.getSource().getName() ) );
                 return pattern;
             }
+            case NOT:
+            case EXISTS: {
+                GroupElement ge = new GroupElement( conditionToGroupElementType( condition.getType() ) );
+                // existential pattern can have only one subcondition
+                ge.addChild( conditionToElement( ctx, condition.getSubConditions().get(0) ) );
+                return ge;
+            }
         }
         throw new UnsupportedOperationException();
     }
