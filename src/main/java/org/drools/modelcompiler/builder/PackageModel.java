@@ -28,10 +28,12 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import org.drools.model.Model;
+import org.drools.modelcompiler.builder.generator.DRLExprIdGenerator;
 
 public class PackageModel {
 
@@ -41,14 +43,21 @@ public class PackageModel {
 
     private Map<String, MethodDeclaration> ruleMethods = new HashMap<>();
 
+    private DRLExprIdGenerator exprIdGenerator;
+
     public PackageModel( String name ) {
         this.name = name;
+        exprIdGenerator = new DRLExprIdGenerator();
     }
 
     public String getName() {
         return name;
     }
     
+    public DRLExprIdGenerator getExprIdGenerator() {
+        return exprIdGenerator;
+    }
+
     public void addImports(Collection<String> imports) {
         this.imports.addAll(imports);
     }
@@ -92,6 +101,12 @@ public class PackageModel {
                 "    }\n"
                 );
         rulesClass.addMember(getRulesMethod);
+        StringBuilder sb = new StringBuilder("\n");
+        sb.append("With the following expression ID:\n");
+        sb.append(exprIdGenerator.toString());
+        sb.append("\n");
+        JavadocComment exprIdComment = new JavadocComment(sb.toString());
+        getRulesMethod.setComment(exprIdComment);
         
         BodyDeclaration<?> getGlobalsMethod = JavaParser.parseBodyDeclaration(
                 "    @Override\n" +

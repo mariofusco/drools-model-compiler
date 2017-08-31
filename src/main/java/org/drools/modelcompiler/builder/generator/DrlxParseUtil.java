@@ -74,14 +74,20 @@ public class DrlxParseUtil {
             return new TypedExpression( new NameExpr( "_this") , Optional.empty());
         } else if ( drlxExpr instanceof NameExpr ) {
             String name = drlxExpr.toString();
-            reactOnProperties.add(name);
-            Method accessor = ClassUtils.getAccessor( typeCursor, name );
-            Class<?> accessorReturnType = accessor.getReturnType();
-
-            NameExpr _this = new NameExpr("_this");
-            MethodCallExpr body = new MethodCallExpr( _this, accessor.getName() );
-            
-            return new TypedExpression( body, Optional.of( accessorReturnType ));
+            if (context.declarations.containsKey(name)) {
+                // then drlxExpr is a single NameExpr referring to a binding, e.g.: "$p1".
+                usedDeclarations.add( name );
+                return new TypedExpression( drlxExpr, Optional.empty());
+            } else {
+                reactOnProperties.add(name);
+                Method accessor = ClassUtils.getAccessor( typeCursor, name );
+                Class<?> accessorReturnType = accessor.getReturnType();
+    
+                NameExpr _this = new NameExpr("_this");
+                MethodCallExpr body = new MethodCallExpr( _this, accessor.getName() );
+                
+                return new TypedExpression( body, Optional.of( accessorReturnType ));
+            }
         } else if ( drlxExpr instanceof FieldAccessExpr ) {
             List<Node> childNodes = drlxExpr.getChildNodes();
             Node firstNode = childNodes.get(0);
