@@ -123,7 +123,7 @@ public class ModelGenerator {
             ruleCall.addArgument( new StringLiteralExpr( ruleDescr.getName() ) );
              
             MethodCallExpr viewCall = new MethodCallExpr(ruleCall, "view");
-            viewCall.addArgument(context.expression);
+            context.expressions.forEach(viewCall::addArgument);
 
             String ruleConsequenceAsBlock = rewriteConsequenceBlock( context, ruleDescr.getConsequence().toString().trim() );
             BlockStmt ruleConsequence = JavaParser.parseBlock( "{" + ruleConsequenceAsBlock + "}" );
@@ -276,13 +276,18 @@ public class ModelGenerator {
     }
 
     private static void visit( RuleContext context, AndDescr descr ) {
-        final MethodCallExpr andDSL = new MethodCallExpr(null, "and");
-        context.addExpression(andDSL);
-        context.pushExprPointer( andDSL::addArgument );
+        // if it's the first (implied) `and` wrapping the first level of patterns, skip adding it to the DSL.
+        if ( context.getExprPointerLevel() != 1 ) {
+            final MethodCallExpr andDSL = new MethodCallExpr(null, "and");
+            context.addExpression(andDSL);
+            context.pushExprPointer( andDSL::addArgument );
+        }
         for (BaseDescr subDescr : descr.getDescrs()) {
             visit( context, subDescr );
         }
-        context.popExprPointer();
+        if ( context.getExprPointerLevel() != 1 ) {
+            context.popExprPointer();
+        }
     }
     
     private static void visit( RuleContext context, OrDescr descr ) {
@@ -478,10 +483,10 @@ public class ModelGenerator {
 
         Map<String, Class<?>> declarations = new HashMap<>();
         
-        Expression expression = null;
+        List<Expression> expressions = new ArrayList<>();
         Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
         {
-            exprPointer.push( init -> this.expression = init );
+            exprPointer.push( init -> this.expressions.add(init) );
         }
         
         public void addExpression(Expression e) {
@@ -492,6 +497,9 @@ public class ModelGenerator {
         }
         public Consumer<Expression> popExprPointer() {
             return exprPointer.pop();
+        }
+        public int getExprPointerLevel() {
+            return exprPointer.size();
         }
 
         public InternalKnowledgePackage getPkg() {
