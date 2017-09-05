@@ -139,7 +139,7 @@ public class PackageModel {
         
         PrettyPrinterConfiguration config = new PrettyPrinterConfiguration();
         config.setColumnAlignParameters(true);
-        config.setColumnAlignFirstMethodChain(true);
+//        config.setColumnAlignFirstMethodChain(true);
         return new PrettyPrinter(config).print(cu);
     }
 
