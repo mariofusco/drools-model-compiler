@@ -37,6 +37,7 @@ import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.drlx.expr.PointFreeExpr;
+import com.github.javaparser.ast.drlx.expr.TemporalLiteralExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
@@ -383,9 +384,9 @@ public class ModelGenerator {
 
             MethodCallExpr methodCallExpr = new MethodCallExpr( null, pointFreeExpr.getOperator().asString() );
             if (pointFreeExpr.getArg1() != null) {
-                methodCallExpr.addArgument( pointFreeExpr.getArg1() );
+                addArgumentToMethodCall( pointFreeExpr.getArg1(), methodCallExpr );
                 if (pointFreeExpr.getArg2() != null) {
-                    methodCallExpr.addArgument( pointFreeExpr.getArg2() );
+                    addArgumentToMethodCall( pointFreeExpr.getArg2(), methodCallExpr );
                 }
             }
 
@@ -393,6 +394,16 @@ public class ModelGenerator {
         }
 
         throw new UnsupportedOperationException("Unknown expression: " + toDrlx(drlxExpr)); // TODO
+    }
+
+    private static void addArgumentToMethodCall( Expression expr, MethodCallExpr methodCallExpr ) {
+        if (expr instanceof TemporalLiteralExpr ) {
+            TemporalLiteralExpr tempExpr1 = (TemporalLiteralExpr) expr;
+            methodCallExpr.addArgument( "" + tempExpr1.getValue() );
+            methodCallExpr.addArgument( "java.util.concurrent.TimeUnit." + tempExpr1.getTimeUnit() );
+        } else {
+            methodCallExpr.addArgument( expr );
+        }
     }
 
     private static Expression mvelParse(RuleContext context, Pattern pattern, String bindingId, String expression) {
