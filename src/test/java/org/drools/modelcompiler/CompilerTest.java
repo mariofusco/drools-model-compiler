@@ -21,13 +21,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
+import org.drools.core.ClockType;
 import org.drools.core.reteoo.AlphaNode;
 import org.drools.modelcompiler.builder.CanonicalModelKieProject;
-import org.drools.modelcompiler.builder.generator.ModelGenerator;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -42,12 +43,13 @@ import org.kie.api.builder.ReleaseId;
 import org.kie.api.builder.model.KieBaseModel;
 import org.kie.api.builder.model.KieModuleModel;
 import org.kie.api.builder.model.KieSessionModel;
+import org.kie.api.conf.EventProcessingOption;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.conf.ClockTypeOption;
+import org.kie.api.time.SessionPseudoClock;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
 public class CompilerTest {
@@ -199,6 +201,10 @@ public class CompilerTest {
     }
 
     private KieSession getKieSession(String str) {
+        return getKieSession(str, null);
+    }
+
+    private KieSession getKieSession(String str, KieModuleModel model) {
         KieServices ks = KieServices.Factory.get();
         
         ReleaseId releaseId = ks.newReleaseId( "org.kie", "kjar-test-" + UUID.randomUUID(), "1.0" );
@@ -207,6 +213,9 @@ public class CompilerTest {
         repo.removeKieModule( releaseId );
         
         KieFileSystem kfs = ks.newKieFileSystem();
+        if (model != null) {
+            kfs.writeKModuleXML( model.toXML() );
+        }
         kfs.writePomXML(KJARUtils.getPom(releaseId));
         kfs.write( "src/main/resources/r1.drl", str );
 // This is actually taken from classloader of test (?) - or anyway it must, because the test are instantiating directly Person.
@@ -227,7 +236,7 @@ public class CompilerTest {
         } else {
             InternalKieModule kieModule = (InternalKieModule) kieBuilder.getKieModule();
             File kjarFile = TestFileUtils.bytesToTempKJARFile( releaseId, kieModule.getBytes(), ".jar" );
-            KieModule zipKieModule = new CanonicalKieModule( releaseId, getDefaultKieModuleModel( ks ), kjarFile );
+            KieModule zipKieModule = new CanonicalKieModule( releaseId, model != null ? model : getDefaultKieModuleModel( ks ), kjarFile );
             repo.addKieModule( zipKieModule );
             
             KieContainer kieContainer = ks.newKieContainer( releaseId );
@@ -236,6 +245,7 @@ public class CompilerTest {
             return kieSession;
         }
     }
+
     private KieModuleModel getDefaultKieModuleModel(KieServices ks) {
         KieModuleModel kproj = ks.newKieModuleModel();
         KieBaseModel kieBaseModel1 = kproj.newKieBaseModel( "kbase" ).setDefault( true );
@@ -416,5 +426,38 @@ public class CompilerTest {
 
         assertEquals( 38, mark.getAge() );
         assertEquals( 40, mario.getAge() );
+    }
+
+    @Test
+    public void testAfter() throws Exception {
+        String str =
+                "import " + StockTick.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "    $a : StockTick( company == \"DROO\" )\n" +
+                "    $b : StockTick( company == \"ACME\", this after[5,8] $a )\n" +
+                "then\n" +
+                "  System.out.println(\"fired\");\n" +
+                "end\n";
+
+        KieModuleModel kproj = KieServices.get().newKieModuleModel();
+        kproj.newKieBaseModel( "kb" )
+             .setDefault( true )
+             .setEventProcessingMode( EventProcessingOption.STREAM )
+             .newKieSessionModel( "ks" )
+             .setDefault( true ).setClockType( ClockTypeOption.get( ClockType.PSEUDO_CLOCK.getId() ) );
+
+        KieSession ksession = getKieSession( str, kproj );
+        SessionPseudoClock clock = ksession.getSessionClock();
+
+        ksession.insert( new StockTick("DROO") );
+        clock.advanceTime( 6, TimeUnit.MILLISECONDS );
+        ksession.insert( new StockTick("ACME") );
+
+        assertEquals(1, ksession.fireAllRules());
+
+        clock.advanceTime( 4, TimeUnit.MILLISECONDS );
+        ksession.insert( new StockTick("ACME") );
+
+        assertEquals(0, ksession.fireAllRules());
     }
 }

@@ -17,8 +17,6 @@
 package org.drools.modelcompiler.builder.generator;
 
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -38,6 +36,7 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.drlx.expr.PointFreeExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
@@ -77,6 +76,7 @@ import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
+import static com.github.javaparser.printer.PrintUtil.toDrlx;
 import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
 public class ModelGenerator {
@@ -135,9 +135,13 @@ public class ModelGenerator {
             boolean rhsRewritten = rewriteRHS(context, ruleBlock, ruleConsequence);
             
             MethodCallExpr thenCall = new MethodCallExpr(viewCall, "then");
-            MethodCallExpr onCall = new MethodCallExpr(null, "on");
-            verifiedDeclUsedInRHS.stream().map(k -> "var_" + k ).forEach( onCall::addArgument );
-            
+            MethodCallExpr onCall = null;
+
+            if (!verifiedDeclUsedInRHS.isEmpty()) {
+                onCall = new MethodCallExpr( null, "on" );
+                verifiedDeclUsedInRHS.stream().map( k -> "var_" + k ).forEach( onCall::addArgument );
+            }
+
             MethodCallExpr executeCall = new MethodCallExpr(onCall, "execute");
             LambdaExpr executeLambda = new LambdaExpr();
             executeCall.addArgument(executeLambda);
@@ -326,50 +330,69 @@ public class ModelGenerator {
     private static Expression drlxParse(RuleContext context, Class<?> patternType, String bindingId, String expression) {
         Expression drlxExpr = DrlxParser.parseExpression( expression );
 
-        if ( !(drlxExpr instanceof BinaryExpr) ) {
-            throw new UnsupportedOperationException("TODO"); // TODO
-        }
-
-        BinaryExpr binaryExpr = (BinaryExpr) drlxExpr;
-        Operator operator = binaryExpr.getOperator();
-
-        IndexUtil.ConstraintType decodeConstraintType = DrlxParseUtil.toConstraintType( operator );
-        Set<String> usedDeclarations = new HashSet<>();
-        Set<String> reactOnProperties = new HashSet<>();
-        TypedExpression left = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getLeft(), usedDeclarations, reactOnProperties );
-        TypedExpression right = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getRight(), usedDeclarations, reactOnProperties );
-
-        Expression combo;
-        if ( left.isPrimitive() ) {
-            combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
-        } else {
-            switch ( operator ) {
-                case EQUALS:
-                    MethodCallExpr methodCallExpr = new MethodCallExpr( left.getExpression(), "equals" );
-                    methodCallExpr.addArgument( right.getExpression() ); // don't create NodeList with static method because missing "parent for child" would null and NPE
-                    combo = methodCallExpr;
-                    break;
-                case NOT_EQUALS:
-                    MethodCallExpr methodCallExpr2 = new MethodCallExpr( left.getExpression(), "equals" );
-                    methodCallExpr2.addArgument( right.getExpression() );
-                    combo = methodCallExpr2;
-                    combo = new UnaryExpr( combo, UnaryExpr.Operator.LOGICAL_COMPLEMENT );
-                    break;
-                default:
-                    combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
-            }
-        }
-
-        if (left.getPrefixExpression() != null) {
-            combo = new BinaryExpr( left.getPrefixExpression(), combo, Operator.AND );
-        }
-
         String exprId = null;
         if ( GENERATE_EXPR_ID ) {
-            exprId = context.getExprId(patternType, expression);    
+            exprId = context.getExprId( patternType, expression );
         }
-        
-        return buildDslExpression( Collections.emptyList(), exprId, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo );
+
+        if ( drlxExpr instanceof BinaryExpr ) {
+            BinaryExpr binaryExpr = (BinaryExpr) drlxExpr;
+            Operator operator = binaryExpr.getOperator();
+
+            IndexUtil.ConstraintType decodeConstraintType = DrlxParseUtil.toConstraintType( operator );
+            Set<String> usedDeclarations = new HashSet<>();
+            Set<String> reactOnProperties = new HashSet<>();
+            TypedExpression left = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getLeft(), usedDeclarations, reactOnProperties );
+            TypedExpression right = DrlxParseUtil.toTypedExpression( context, patternType, binaryExpr.getRight(), usedDeclarations, reactOnProperties );
+
+            Expression combo;
+            if ( left.isPrimitive() ) {
+                combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
+            } else {
+                switch ( operator ) {
+                    case EQUALS:
+                        MethodCallExpr methodCallExpr = new MethodCallExpr( left.getExpression(), "equals" );
+                        methodCallExpr.addArgument( right.getExpression() ); // don't create NodeList with static method because missing "parent for child" would null and NPE
+                        combo = methodCallExpr;
+                        break;
+                    case NOT_EQUALS:
+                        MethodCallExpr methodCallExpr2 = new MethodCallExpr( left.getExpression(), "equals" );
+                        methodCallExpr2.addArgument( right.getExpression() );
+                        combo = methodCallExpr2;
+                        combo = new UnaryExpr( combo, UnaryExpr.Operator.LOGICAL_COMPLEMENT );
+                        break;
+                    default:
+                        combo = new BinaryExpr( left.getExpression(), right.getExpression(), operator );
+                }
+            }
+
+            if ( left.getPrefixExpression() != null ) {
+                combo = new BinaryExpr( left.getPrefixExpression(), combo, Operator.AND );
+            }
+
+            return buildDslExpression( exprId, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo, false );
+        }
+
+        if ( drlxExpr instanceof PointFreeExpr ) {
+            PointFreeExpr pointFreeExpr = (PointFreeExpr) drlxExpr;
+
+            Set<String> usedDeclarations = new HashSet<>();
+            Set<String> reactOnProperties = new HashSet<>();
+            DrlxParseUtil.toTypedExpression( context, patternType, pointFreeExpr.getLeft(), usedDeclarations, reactOnProperties );
+            DrlxParseUtil.toTypedExpression( context, patternType, pointFreeExpr.getRight(), usedDeclarations, reactOnProperties );
+
+            MethodCallExpr methodCallExpr = new MethodCallExpr( null, pointFreeExpr.getOperator().asString() );
+            if (pointFreeExpr.getArg1() != null) {
+                methodCallExpr.addArgument( pointFreeExpr.getArg1() );
+                if (pointFreeExpr.getArg2() != null) {
+                    methodCallExpr.addArgument( pointFreeExpr.getArg2() );
+                }
+            }
+
+            return buildDslExpression( exprId, bindingId, null, usedDeclarations, reactOnProperties, null, null, methodCallExpr, true );
+        }
+
+        throw new UnsupportedOperationException("Unknown expression: " + toDrlx(drlxExpr)); // TODO
     }
 
     private static Expression mvelParse(RuleContext context, Pattern pattern, String bindingId, String expression) {
@@ -405,34 +428,38 @@ public class ModelGenerator {
                 combo = left.getExpressionAsString() + " " + relationalExprDescr.getOperator() + " " + right.getExpressionAsString();
         }
 
-        return buildDslExpression( Collections.emptyList(), null, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ) );
+        return buildDslExpression( null, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ), false );
     }
 
-    private static Expression buildDslExpression( Collection<String> listenedProperties, String exprId, String bindingId, ConstraintType decodeConstraintType,
+    private static Expression buildDslExpression( String exprId, String bindingId, ConstraintType decodeConstraintType,
                                                   Set<String> usedDeclarations, Set<String> reactOnProperties,
-                                                  TypedExpression left, TypedExpression right, Expression combo ) {
-        
+                                                  TypedExpression left, TypedExpression right, Expression expr, boolean isStatic ) {
+
         MethodCallExpr exprDSL = new MethodCallExpr(null, "expr");
         if (exprId != null && !"".equals(exprId)) {
             exprDSL.addArgument( new StringLiteralExpr(exprId) );
         }
         exprDSL.addArgument( new NameExpr("var_" + bindingId) );
         usedDeclarations.stream().map( x -> new NameExpr( "var_" + x )).forEach(exprDSL::addArgument);
-        
-        LambdaExpr exprDSL_predicate = new LambdaExpr();
-        exprDSL_predicate.setEnclosingParameters(true);
-        exprDSL_predicate.addParameter(new Parameter(new UnknownType(), "_this"));
-        usedDeclarations.stream().map( s -> new Parameter(new UnknownType(), s) ).forEach(exprDSL_predicate::addParameter);
-        exprDSL_predicate.setBody( new ExpressionStmt( combo ) );
-        
-        exprDSL.addArgument(exprDSL_predicate);
+
+        Expression exprArg = expr;
+        if (!isStatic) {
+            LambdaExpr lambdaExpr = new LambdaExpr();
+            lambdaExpr.setEnclosingParameters( true );
+            lambdaExpr.addParameter( new Parameter( new UnknownType(), "_this" ) );
+            usedDeclarations.stream().map( s -> new Parameter( new UnknownType(), s ) ).forEach( lambdaExpr::addParameter );
+            lambdaExpr.setBody( new ExpressionStmt( expr ) );
+            exprArg = lambdaExpr;
+        }
+
+        exprDSL.addArgument(exprArg);
         
         Expression result = exprDSL;
         
         
         // -- all indexing stuff --
         // .indexBy(..) is only added if left is not an identity expression:
-        if ( !(left.getExpression() instanceof NameExpr && ((NameExpr)left.getExpression()).getName().getIdentifier().equals("_this")) ) {
+        if ( decodeConstraintType != null && !(left.getExpression() instanceof NameExpr && ((NameExpr)left.getExpression()).getName().getIdentifier().equals("_this")) ) {
             Class<?> indexType = Stream.of( left, right ).map( TypedExpression::getType )
                                        .flatMap( ModelGenerator::optToStream )
                                        .findFirst().get();
@@ -466,10 +493,9 @@ public class ModelGenerator {
         // -- all reactOn stuff --
         if ( !reactOnProperties.isEmpty() ) {
             MethodCallExpr reactOnDSL = new MethodCallExpr(result, "reactOn");
-            Stream.concat( reactOnProperties.stream(),
-                           Optional.ofNullable( listenedProperties ).map( Collection::stream ).orElseGet( Stream::empty ) )
-                           .map( StringLiteralExpr::new )
-                           .forEach( reactOnDSL::addArgument );
+            reactOnProperties.stream()
+                             .map( StringLiteralExpr::new )
+                             .forEach( reactOnDSL::addArgument );
 
             result = reactOnDSL;
         }

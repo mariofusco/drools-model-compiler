@@ -29,7 +29,6 @@ import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.junit.Test;
 import org.kie.api.KieBase;
 import org.kie.api.conf.EventProcessingOption;
-import org.kie.api.definition.type.Role;
 import org.kie.api.io.ResourceType;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.KieSessionConfiguration;
@@ -41,19 +40,6 @@ import static org.drools.model.DSL.*;
 import static org.junit.Assert.assertEquals;
 
 public class CepTest {
-
-    @Role(Role.Type.EVENT)
-    public static class StockTick {
-        private final String company;
-
-        public StockTick( String company ) {
-            this.company = company;
-        }
-
-        public String getCompany() {
-            return company;
-        }
-    }
 
     @Test
     public void testAfter() throws Exception {
