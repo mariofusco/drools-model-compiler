@@ -18,7 +18,7 @@ package org.drools.modelcompiler.builder.generator;
 
 import java.util.Optional;
 
-import com.github.javaparser.ast.expr.Expression;
+import org.drools.javaparser.ast.expr.Expression;
 
 public class TypedExpression {
 

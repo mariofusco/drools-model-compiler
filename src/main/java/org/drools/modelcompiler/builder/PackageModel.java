@@ -22,16 +22,16 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.InitializerDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.comments.JavadocComment;
-import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
+import org.drools.javaparser.JavaParser;
+import org.drools.javaparser.ast.CompilationUnit;
+import org.drools.javaparser.ast.body.BodyDeclaration;
+import org.drools.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import org.drools.javaparser.ast.body.InitializerDeclaration;
+import org.drools.javaparser.ast.body.MethodDeclaration;
+import org.drools.javaparser.ast.comments.JavadocComment;
+import org.drools.javaparser.ast.expr.MethodCallExpr;
+import org.drools.javaparser.ast.expr.NameExpr;
+import org.drools.javaparser.ast.stmt.BlockStmt;
 import org.drools.model.Model;
 import org.drools.modelcompiler.builder.generator.DRLExprIdGenerator;
 

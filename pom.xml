@@ -38,7 +38,7 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drlx-compiler</artifactId>
+      <artifactId>drlx-parser</artifactId>
       <version>${version.drools}</version>
     </dependency>
 
