@@ -32,6 +32,8 @@ import org.drools.javaparser.ast.comments.JavadocComment;
 import org.drools.javaparser.ast.expr.MethodCallExpr;
 import org.drools.javaparser.ast.expr.NameExpr;
 import org.drools.javaparser.ast.stmt.BlockStmt;
+import org.drools.javaparser.printer.PrettyPrinter;
+import org.drools.javaparser.printer.PrettyPrinterConfiguration;
 import org.drools.model.Model;
 import org.drools.modelcompiler.builder.generator.DRLExprIdGenerator;
 
@@ -135,7 +137,10 @@ public class PackageModel {
         // each method per Drlx parser result
         ruleMethods.values().forEach( rulesClass::addMember );
         
-        return cu.toString();
+        PrettyPrinterConfiguration config = new PrettyPrinterConfiguration();
+        config.setColumnAlignParameters(true);
+        config.setColumnAlignFirstMethodChain(true);
+        return new PrettyPrinter(config).print(cu);
     }
 
     public void print() {

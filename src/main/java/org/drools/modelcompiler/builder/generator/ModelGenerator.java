@@ -60,6 +60,7 @@ import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
 import org.drools.compiler.lang.descr.BaseDescr;
 import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
+import org.drools.compiler.lang.descr.NotDescr;
 import org.drools.compiler.lang.descr.OrDescr;
 import org.drools.compiler.lang.descr.PatternDescr;
 import org.drools.compiler.lang.descr.RelationalExprDescr;
@@ -277,9 +278,21 @@ public class ModelGenerator {
             visit( context, ( (OrDescr) descr ));
         } else if ( descr instanceof PatternDescr ) {
             visit( context, ( (PatternDescr) descr ));
+        } else if ( descr instanceof NotDescr ) {
+            visit( context, ( (NotDescr) descr ));
         } else {
             throw new UnsupportedOperationException("TODO"); // TODO
         }
+    }
+    
+    private static void visit( RuleContext context, NotDescr descr ) {
+        final MethodCallExpr notDSL = new MethodCallExpr(null, "not");
+        context.addExpression(notDSL);
+        context.pushExprPointer( notDSL::addArgument );
+        for (BaseDescr subDescr : descr.getDescrs()) {
+            visit( context, subDescr );
+        }
+        context.popExprPointer();
     }
 
     private static void visit( RuleContext context, AndDescr descr ) {
@@ -371,7 +384,7 @@ public class ModelGenerator {
                 combo = new BinaryExpr( left.getPrefixExpression(), combo, Operator.AND );
             }
 
-            return buildDslExpression( exprId, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo, false );
+            return buildDslExpression( patternType, exprId, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, combo, false );
         }
 
         if ( drlxExpr instanceof PointFreeExpr ) {
@@ -390,7 +403,7 @@ public class ModelGenerator {
                 }
             }
 
-            return buildDslExpression( exprId, bindingId, null, usedDeclarations, reactOnProperties, null, null, methodCallExpr, true );
+            return buildDslExpression( patternType, exprId, bindingId, null, usedDeclarations, reactOnProperties, null, null, methodCallExpr, true );
         }
 
         throw new UnsupportedOperationException("Unknown expression: " + toDrlx(drlxExpr)); // TODO
@@ -439,10 +452,10 @@ public class ModelGenerator {
                 combo = left.getExpressionAsString() + " " + relationalExprDescr.getOperator() + " " + right.getExpressionAsString();
         }
 
-        return buildDslExpression( null, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ), false );
+        return buildDslExpression( pattern.getObjectType().getValueType().getClassType(), null, bindingId, decodeConstraintType, usedDeclarations, reactOnProperties, left, right, new NameExpr( combo ), false );
     }
 
-    private static Expression buildDslExpression( String exprId, String bindingId, ConstraintType decodeConstraintType,
+    private static Expression buildDslExpression( Class<?> patternType, String exprId, String bindingId, ConstraintType decodeConstraintType,
                                                   Set<String> usedDeclarations, Set<String> reactOnProperties,
                                                   TypedExpression left, TypedExpression right, Expression expr, boolean isStatic ) {
 
@@ -450,7 +463,15 @@ public class ModelGenerator {
         if (exprId != null && !"".equals(exprId)) {
             exprDSL.addArgument( new StringLiteralExpr(exprId) );
         }
-        exprDSL.addArgument( new NameExpr("var_" + bindingId) );
+        if (bindingId != null) {
+            exprDSL.addArgument( new NameExpr("var_" + bindingId) );    
+        } else {
+            MethodCallExpr variableOfCall = new MethodCallExpr(null, "variableOf");
+            MethodCallExpr typeCall = new MethodCallExpr(null, "type");
+            typeCall.addArgument( new ClassExpr( JavaParser.parseClassOrInterfaceType(patternType.getCanonicalName()) ));
+            variableOfCall.addArgument(typeCall);
+            exprDSL.addArgument( variableOfCall );
+        }
         usedDeclarations.stream().map( x -> new NameExpr( "var_" + x )).forEach(exprDSL::addArgument);
 
         Expression exprArg = expr;

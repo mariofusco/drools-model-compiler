@@ -460,4 +460,27 @@ public class CompilerTest {
 
         assertEquals(0, ksession.fireAllRules());
     }
+    
+    @Test
+    public void testNot() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "import " + Result.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  not( Person( name.length == 4 ) )\n" +
+                "then\n" +
+                "  insert(new Result(\"ok\"));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("ok", results.get(0).getValue());
+    }
 }
