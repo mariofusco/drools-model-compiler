@@ -56,6 +56,7 @@ import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
 import org.drools.model.View;
+import org.drools.model.impl.DeclarationImpl;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
 import org.drools.modelcompiler.constraints.LambdaAccumulator;
@@ -67,8 +68,8 @@ import org.kie.api.definition.type.Role;
 import org.kie.api.definition.type.Role.Type;
 
 import static org.drools.core.rule.Pattern.getReadAcessor;
+import static org.drools.model.DSL.declarationOf;
 import static org.drools.model.DSL.type;
-import static org.drools.model.DSL.variableOf;
 import static org.drools.modelcompiler.ModelCompilerUtil.conditionToGroupElementType;
 
 public class KiePackagesBuilder {
@@ -137,26 +138,21 @@ public class KiePackagesBuilder {
     private void populateLHS( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
         GroupElement lhs = ctx.getRule().getLhs();
         if (ctx.getRule().getRuleUnitClassName() != null) {
-            lhs.addChild( addUnitPattern( ctx, pkg, view ) );
+            lhs.addChild( addPatternForVariable( ctx, getUnitVariable( ctx, pkg, view ) ) );
         }
         view.getSubConditions().forEach( condition -> lhs.addChild( conditionToElement(ctx, condition) ) );
-    }
-
-    private Pattern addUnitPattern( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
-        Pattern unitPattern = addPatternForVariable( ctx, getUnitVariable( ctx, pkg, view ) );
-        unitPattern.setSource( new EntryPointId( RuleUnitUtil.RULE_UNIT_ENTRY_POINT ) );
-        return unitPattern;
     }
 
     private Variable getUnitVariable( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
         String unitClassName = ctx.getRule().getRuleUnitClassName();
         for (Variable<?> var : view.getBoundVariables()) {
-            if (var.getType().asClass().getName().equals( unitClassName )) {
+            if ( var instanceof DeclarationImpl && var.getType().asClass().getName().equals( unitClassName ) ) {
+                ( (DeclarationImpl) var ).setEntryPoint( RuleUnitUtil.RULE_UNIT_ENTRY_POINT );
                 return var;
             }
         }
         try {
-            return variableOf( type( pkg.getTypeResolver().resolveType( unitClassName ) ) );
+            return declarationOf( type( pkg.getTypeResolver().resolveType( unitClassName ) ), RuleUnitUtil.RULE_UNIT_ENTRY_POINT );
         } catch (ClassNotFoundException e) {
             throw new RuntimeException( e );
         }
@@ -237,6 +233,10 @@ public class KiePackagesBuilder {
                                        getObjectType( patternClass ),
                                        patternVariable.getName(),
                                        true );
+
+        if (patternVariable instanceof org.drools.model.Declaration && ( (org.drools.model.Declaration) patternVariable ).getEntryPoint() != null) {
+            pattern.setSource( new EntryPointId( ( (org.drools.model.Declaration) patternVariable ).getEntryPoint() ) );
+        }
         ctx.registerPattern( patternVariable, pattern );
         return pattern;
     }

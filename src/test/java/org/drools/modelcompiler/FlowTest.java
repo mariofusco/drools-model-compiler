@@ -51,8 +51,8 @@ public class FlowTest {
     @Test
     public void testBeta() {
         Result result = new Result();
-        Variable<Person> markV = variableOf( type( Person.class ) );
-        Variable<Person> olderV = variableOf( type( Person.class ) );
+        Variable<Person> markV = declarationOf( type( Person.class ) );
+        Variable<Person> olderV = declarationOf( type( Person.class ) );
 
         Rule rule = rule( "beta" )
                 .view(
@@ -99,9 +99,9 @@ public class FlowTest {
 
     @Test
     public void testBetaWithResult() {
-        Variable<Person> markV = variableOf( type( Person.class ) );
-        Variable<Person> olderV = variableOf( type( Person.class ) );
-        Variable<Result> resultV = variableOf( type( Result.class ) );
+        Variable<Person> markV = declarationOf( type( Person.class ) );
+        Variable<Person> olderV = declarationOf( type( Person.class ) );
+        Variable<Result> resultV = declarationOf( type( Result.class ) );
 
         Rule rule = rule( "beta" )
                 .view(
@@ -141,9 +141,9 @@ public class FlowTest {
     @Test
     public void test3Patterns() {
         Result result = new Result();
-        Variable<Person> personV = variableOf( type( Person.class ) );
-        Variable<Person> markV = variableOf( type( Person.class ) );
-        Variable<String> nameV = variableOf( type( String.class ) );
+        Variable<Person> personV = declarationOf( type( Person.class ) );
+        Variable<Person> markV = declarationOf( type( Person.class ) );
+        Variable<String> nameV = declarationOf( type( String.class ) );
 
         Rule rule = rule( "myrule" )
                 .view(
@@ -171,9 +171,9 @@ public class FlowTest {
     @Test
     public void testOr() {
         Result result = new Result();
-        Variable<Person> personV = variableOf( type( Person.class ) );
-        Variable<Person> markV = variableOf( type( Person.class ) );
-        Variable<String> nameV = variableOf( type( String.class ) );
+        Variable<Person> personV = declarationOf( type( Person.class ) );
+        Variable<Person> markV = declarationOf( type( Person.class ) );
+        Variable<String> nameV = declarationOf( type( String.class ) );
 
         Rule rule = rule( "or" )
                 .view(
@@ -206,8 +206,8 @@ public class FlowTest {
     @Test
     public void testNot() {
         Result result = new Result();
-        Variable<Person> oldestV = variableOf( type( Person.class ) );
-        Variable<Person> otherV = variableOf( type( Person.class ) );
+        Variable<Person> oldestV = declarationOf( type( Person.class ) );
+        Variable<Person> otherV = declarationOf( type( Person.class ) );
 
         Rule rule = rule("not")
                 .view(
@@ -232,8 +232,8 @@ public class FlowTest {
     @Test
     public void testAccumulate1() {
         Result result = new Result();
-        Variable<Person> person = variableOf( type( Person.class ) );
-        Variable<Integer> resultSum = variableOf( type( Integer.class ) );
+        Variable<Person> person = declarationOf( type( Person.class ) );
+        Variable<Integer> resultSum = declarationOf( type( Integer.class ) );
 
         Rule rule = rule("accumulate")
                 .view(
@@ -258,9 +258,9 @@ public class FlowTest {
     @Test
     public void testAccumulate2() {
         Result result = new Result();
-        Variable<Person> person = variableOf( type( Person.class ) );
-        Variable<Integer> resultSum = variableOf( type( Integer.class ) );
-        Variable<Double> resultAvg = variableOf( type( Double.class ) );
+        Variable<Person> person = declarationOf( type( Person.class ) );
+        Variable<Integer> resultSum = declarationOf( type( Integer.class ) );
+        Variable<Double> resultAvg = declarationOf( type( Double.class ) );
 
         Rule rule = rule("accumulate")
                 .view(
@@ -288,7 +288,7 @@ public class FlowTest {
 
     @Test
     public void testGlobalInConsequence() {
-        Variable<Person> markV = variableOf( type( Person.class ) );
+        Variable<Person> markV = declarationOf( type( Person.class ) );
         Global<Result> resultG = globalOf( type( Result.class ), "org.mypkg" );
 
         Rule rule = rule( "org.mypkg", "global" )
@@ -322,7 +322,7 @@ public class FlowTest {
 
     @Test
     public void testGlobalInConstraint() {
-        Variable<Person> markV = variableOf( type( Person.class ) );
+        Variable<Person> markV = declarationOf( type( Person.class ) );
         Global<Result> resultG = globalOf( type( Result.class ), "org.mypkg" );
         Global<String> nameG = globalOf( type( String.class ), "org.mypkg" );
 

@@ -112,12 +112,12 @@ public class ModelGenerator {
                 varType.setTypeArguments(declType);
                 VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "var_" + decl.getKey(), Modifier.FINAL);
                 
-                MethodCallExpr variableOfCall = new MethodCallExpr(null, "variableOf");
+                MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
                 MethodCallExpr typeCall = new MethodCallExpr(null, "type");
                 typeCall.addArgument( new ClassExpr( declType ));
-                variableOfCall.addArgument(typeCall);
+                declarationOfCall.addArgument(typeCall);
                 
-                AssignExpr var_assign = new AssignExpr(var_, variableOfCall, AssignExpr.Operator.ASSIGN);
+                AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
                 ruleBlock.addStatement(var_assign);
             }
 
@@ -466,11 +466,11 @@ public class ModelGenerator {
         if (bindingId != null) {
             exprDSL.addArgument( new NameExpr("var_" + bindingId) );    
         } else {
-            MethodCallExpr variableOfCall = new MethodCallExpr(null, "variableOf");
+            MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
             MethodCallExpr typeCall = new MethodCallExpr(null, "type");
             typeCall.addArgument( new ClassExpr( JavaParser.parseClassOrInterfaceType(patternType.getCanonicalName()) ));
-            variableOfCall.addArgument(typeCall);
-            exprDSL.addArgument( variableOfCall );
+            declarationOfCall.addArgument(typeCall);
+            exprDSL.addArgument( declarationOfCall );
         }
         usedDeclarations.stream().map( x -> new NameExpr( "var_" + x )).forEach(exprDSL::addArgument);
 

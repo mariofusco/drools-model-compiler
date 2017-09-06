@@ -116,8 +116,8 @@ public final class BenchmarkUtil {
                "" +
                "public class Variables {\n" +
                "" +
-               "    public static final Variable<Person> markV = variableOf( type( Person.class ) );\n" +
-               "    public static final Variable<Person> olderV = variableOf( type( Person.class ) );\n" +
+               "    public static final Variable<Person> markV = declarationOf( type( Person.class ) );\n" +
+               "    public static final Variable<Person> olderV = declarationOf( type( Person.class ) );\n" +
                "}\n";
     }
 

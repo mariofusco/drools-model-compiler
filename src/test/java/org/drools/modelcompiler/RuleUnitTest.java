@@ -64,7 +64,7 @@ public class RuleUnitTest {
     public void testRuleUnit() {
         List<String> result = new ArrayList<>();
 
-        Variable<Person> adult = variableOf( type( Person.class ) );
+        Variable<Person> adult = declarationOf( type( Person.class ) );
         Source<Person> persons = sourceOf( "persons", type( Person.class ) );
 
         Rule rule = rule( "org.drools.retebuilder", "Adult" ).unit( AdultUnit.class )
@@ -93,8 +93,8 @@ public class RuleUnitTest {
 
     @Test
     public void testRuleUnitWithVarBinding() {
-        Variable<AdultUnit> unit = variableOf( type( AdultUnit.class ) );
-        Variable<Person> adult = variableOf( type( Person.class ) );
+        Variable<AdultUnit> unit = declarationOf( type( AdultUnit.class ) );
+        Variable<Person> adult = declarationOf( type( Person.class ) );
         Source<Person> persons = sourceOf( "persons", type( Person.class ) );
 
         Rule rule = rule( "org.drools.retebuilder", "Adult" ).unit( AdultUnit.class )
