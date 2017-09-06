@@ -16,29 +16,13 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import org.drools.javaparser.JavaParser;
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
 import org.drools.compiler.lang.descr.BaseDescr;
 import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
 import org.drools.compiler.lang.descr.EntryPointDescr;
+import org.drools.compiler.lang.descr.ExistsDescr;
 import org.drools.compiler.lang.descr.NotDescr;
 import org.drools.compiler.lang.descr.OrDescr;
 import org.drools.compiler.lang.descr.PatternDescr;
@@ -50,6 +34,7 @@ import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.drools.drlx.DrlxParser;
+import org.drools.javaparser.JavaParser;
 import org.drools.javaparser.ast.Modifier;
 import org.drools.javaparser.ast.body.MethodDeclaration;
 import org.drools.javaparser.ast.body.Parameter;
@@ -72,19 +57,28 @@ import org.drools.javaparser.ast.stmt.ExpressionStmt;
 import org.drools.javaparser.ast.stmt.ReturnStmt;
 import org.drools.javaparser.ast.type.ClassOrInterfaceType;
 import org.drools.javaparser.ast.type.UnknownType;
-import org.drools.compiler.compiler.DrlExprParser;
-import org.drools.core.definitions.InternalKnowledgePackage;
-import org.drools.core.rule.Pattern;
-import org.drools.core.util.ClassUtils;
-import org.drools.core.util.index.IndexUtil;
-import org.drools.core.util.index.IndexUtil.ConstraintType;
-import org.drools.drlx.DrlxParser;
 import org.drools.model.BitMask;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
+
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.drools.javaparser.printer.PrintUtil.toDrlx;
 import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
@@ -283,13 +277,13 @@ public class ModelGenerator {
     }
 
     private static void visit( RuleContext context, BaseDescr descr ) {
-        if ( descr instanceof AndDescr ) {
+        if ( descr instanceof AndDescr) {
             visit( context, ( (AndDescr) descr ));
-        } else if ( descr instanceof OrDescr ) {
+        } else if ( descr instanceof OrDescr) {
             visit( context, ( (OrDescr) descr ));
-        } else if ( descr instanceof PatternDescr ) {
+        } else if ( descr instanceof PatternDescr) {
             visit( context, ( (PatternDescr) descr ));
-        } else if ( descr instanceof NotDescr ) {
+        } else if ( descr instanceof NotDescr) {
             visit( context, ( (NotDescr) descr ));
         } else if ( descr instanceof ExistsDescr) {
             visit( context, ( (ExistsDescr) descr ));
