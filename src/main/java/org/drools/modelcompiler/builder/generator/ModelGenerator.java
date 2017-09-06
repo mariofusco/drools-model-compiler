@@ -32,6 +32,23 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.drools.compiler.compiler.DrlExprParser;
+import org.drools.compiler.lang.descr.AndDescr;
+import org.drools.compiler.lang.descr.AtomicExprDescr;
+import org.drools.compiler.lang.descr.BaseDescr;
+import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
+import org.drools.compiler.lang.descr.EntryPointDescr;
+import org.drools.compiler.lang.descr.NotDescr;
+import org.drools.compiler.lang.descr.OrDescr;
+import org.drools.compiler.lang.descr.PatternDescr;
+import org.drools.compiler.lang.descr.RelationalExprDescr;
+import org.drools.compiler.lang.descr.RuleDescr;
+import org.drools.core.definitions.InternalKnowledgePackage;
+import org.drools.core.rule.Pattern;
+import org.drools.core.util.ClassUtils;
+import org.drools.core.util.index.IndexUtil;
+import org.drools.core.util.index.IndexUtil.ConstraintType;
+import org.drools.drlx.DrlxParser;
 import org.drools.javaparser.JavaParser;
 import org.drools.javaparser.ast.Modifier;
 import org.drools.javaparser.ast.body.MethodDeclaration;
@@ -55,22 +72,6 @@ import org.drools.javaparser.ast.stmt.ExpressionStmt;
 import org.drools.javaparser.ast.stmt.ReturnStmt;
 import org.drools.javaparser.ast.type.ClassOrInterfaceType;
 import org.drools.javaparser.ast.type.UnknownType;
-import org.drools.compiler.compiler.DrlExprParser;
-import org.drools.compiler.lang.descr.AndDescr;
-import org.drools.compiler.lang.descr.AtomicExprDescr;
-import org.drools.compiler.lang.descr.BaseDescr;
-import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
-import org.drools.compiler.lang.descr.NotDescr;
-import org.drools.compiler.lang.descr.OrDescr;
-import org.drools.compiler.lang.descr.PatternDescr;
-import org.drools.compiler.lang.descr.RelationalExprDescr;
-import org.drools.compiler.lang.descr.RuleDescr;
-import org.drools.core.definitions.InternalKnowledgePackage;
-import org.drools.core.rule.Pattern;
-import org.drools.core.util.ClassUtils;
-import org.drools.core.util.index.IndexUtil;
-import org.drools.core.util.index.IndexUtil.ConstraintType;
-import org.drools.drlx.DrlxParser;
 import org.drools.model.BitMask;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
@@ -105,9 +106,9 @@ public class ModelGenerator {
             BlockStmt ruleBlock = new BlockStmt();
             ruleMethod.setBody(ruleBlock);
 
-            for ( Entry<String, Class<?>> decl : context.declarations.entrySet() ) {
+            for ( Entry<String, DeclarationSpec> decl : context.declarations.entrySet() ) {
                 ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
-                ClassOrInterfaceType declType = JavaParser.parseClassOrInterfaceType( decl.getValue().getCanonicalName() );
+                ClassOrInterfaceType declType = JavaParser.parseClassOrInterfaceType( decl.getValue().declarationClass.getCanonicalName() );
                 
                 varType.setTypeArguments(declType);
                 VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "var_" + decl.getKey(), Modifier.FINAL);
@@ -116,7 +117,10 @@ public class ModelGenerator {
                 MethodCallExpr typeCall = new MethodCallExpr(null, "type");
                 typeCall.addArgument( new ClassExpr( declType ));
                 declarationOfCall.addArgument(typeCall);
-                
+                if (decl.getValue().entryPoint != null) {
+                    declarationOfCall.addArgument( new StringLiteralExpr( decl.getValue().entryPoint ) );
+                }
+
                 AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
                 ruleBlock.addStatement(var_assign);
             }
@@ -232,7 +236,7 @@ public class ModelGenerator {
             Expression argExpr = updateExpr.getArgument( 0 );
             if (argExpr instanceof NameExpr) {
                 String updatedVar = ( (NameExpr) argExpr ).getNameAsString();
-                Class<?> updatedClass = context.declarations.get( updatedVar );
+                Class<?> updatedClass = context.declarations.get( updatedVar ).declarationClass;
 
                 MethodCallExpr bitMaskCreation = new MethodCallExpr( new NameExpr( BitMask.class.getCanonicalName() ), "getPatternMask" );
                 bitMaskCreation.addArgument( new ClassExpr( JavaParser.parseClassOrInterfaceType( updatedClass.getCanonicalName() ) ) );
@@ -329,7 +333,8 @@ public class ModelGenerator {
         }
 
         if (pattern.getIdentifier() != null) {
-            context.declarations.put( pattern.getIdentifier(), patternType );
+            String entryPoint = pattern.getSource() instanceof EntryPointDescr ? ( (EntryPointDescr) pattern.getSource() ).getEntryId() : null;
+            context.declarations.put( pattern.getIdentifier(), new DeclarationSpec( patternType, entryPoint ) );
         }
 
         for (BaseDescr constraint : pattern.getConstraint().getDescrs()) {
@@ -546,19 +551,16 @@ public class ModelGenerator {
         private final InternalKnowledgePackage pkg;
         private DRLExprIdGenerator exprIdGenerator;
 
+        Map<String, DeclarationSpec> declarations = new HashMap<>();
+        Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
+        List<Expression> expressions = new ArrayList<>();
+
         public RuleContext( InternalKnowledgePackage pkg, DRLExprIdGenerator exprIdGenerator ) {
             this.pkg = pkg;
             this.exprIdGenerator = exprIdGenerator;
+            exprPointer.push( this.expressions::add );
         }
 
-        Map<String, Class<?>> declarations = new HashMap<>();
-        
-        List<Expression> expressions = new ArrayList<>();
-        Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
-        {
-            exprPointer.push( init -> this.expressions.add(init) );
-        }
-        
         public void addExpression(Expression e) {
             exprPointer.peek().accept(e);
         }
@@ -578,6 +580,16 @@ public class ModelGenerator {
         
         public String getExprId(Class<?> patternType, String drlConstraint) {
             return exprIdGenerator.getExprId(patternType, drlConstraint);
+        }
+    }
+
+    public static class DeclarationSpec {
+        final Class<?> declarationClass;
+        final String entryPoint;
+
+        public DeclarationSpec( Class<?> declarationClass, String entryPoint ) {
+            this.declarationClass = declarationClass;
+            this.entryPoint = entryPoint;
         }
     }
 }

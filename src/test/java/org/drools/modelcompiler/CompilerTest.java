@@ -460,7 +460,43 @@ public class CompilerTest {
 
         assertEquals(0, ksession.fireAllRules());
     }
-    
+
+    @Test
+    public void testAfterWithEntryPoints() throws Exception {
+        String str =
+                "import " + StockTick.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "    $a : StockTick( company == \"DROO\" ) from entry-point ep1\n" +
+                "    $b : StockTick( company == \"ACME\", this after[5s,8s] $a ) from entry-point ep2\n" +
+                "then\n" +
+                "  System.out.println(\"fired\");\n" +
+                "end\n";
+
+        KieModuleModel kproj = KieServices.get().newKieModuleModel();
+        kproj.newKieBaseModel( "kb" )
+             .setDefault( true )
+             .setEventProcessingMode( EventProcessingOption.STREAM )
+             .newKieSessionModel( "ks" )
+             .setDefault( true ).setClockType( ClockTypeOption.get( ClockType.PSEUDO_CLOCK.getId() ) );
+
+        KieSession ksession = getKieSession( str, kproj );
+        SessionPseudoClock clock = ksession.getSessionClock();
+
+        ksession.getEntryPoint( "ep1" ).insert( new StockTick("DROO") );
+
+        clock.advanceTime( 6, TimeUnit.SECONDS );
+        ksession.getEntryPoint( "ep1" ).insert( new StockTick("ACME") );
+        assertEquals(0, ksession.fireAllRules());
+
+        clock.advanceTime( 1, TimeUnit.SECONDS );
+        ksession.getEntryPoint( "ep2" ).insert( new StockTick("ACME") );
+        assertEquals(1, ksession.fireAllRules());
+
+        clock.advanceTime( 4, TimeUnit.SECONDS );
+        ksession.getEntryPoint( "ep2" ).insert( new StockTick("ACME") );
+        assertEquals(0, ksession.fireAllRules());
+    }
+
     @Test
     public void testNot() {
         String str =
