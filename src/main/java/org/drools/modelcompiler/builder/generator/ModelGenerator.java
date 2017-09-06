@@ -36,6 +36,7 @@ import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
 import org.drools.compiler.lang.descr.BaseDescr;
+import org.drools.compiler.lang.descr.BehaviorDescr;
 import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
 import org.drools.compiler.lang.descr.EntryPointDescr;
 import org.drools.compiler.lang.descr.NotDescr;
@@ -44,7 +45,9 @@ import org.drools.compiler.lang.descr.PatternDescr;
 import org.drools.compiler.lang.descr.RelationalExprDescr;
 import org.drools.compiler.lang.descr.RuleDescr;
 import org.drools.core.definitions.InternalKnowledgePackage;
+import org.drools.core.rule.Behavior;
 import org.drools.core.rule.Pattern;
+import org.drools.core.time.TimeUtils;
 import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
@@ -117,8 +120,20 @@ public class ModelGenerator {
                 MethodCallExpr typeCall = new MethodCallExpr(null, "type");
                 typeCall.addArgument( new ClassExpr( declType ));
                 declarationOfCall.addArgument(typeCall);
-                if (decl.getValue().entryPoint != null) {
-                    declarationOfCall.addArgument( new StringLiteralExpr( decl.getValue().entryPoint ) );
+                if (decl.getValue().getEntryPoint() != null) {
+                    declarationOfCall.addArgument( new StringLiteralExpr( decl.getValue().getEntryPoint() ) );
+                }
+                for ( BehaviorDescr behaviorDescr : decl.getValue().getBehaviors() ) {
+                    MethodCallExpr windowCall = new MethodCallExpr(null, "window");
+                    if ( Behavior.BehaviorType.TIME_WINDOW.matches( behaviorDescr.getSubType() ) ) {
+                        windowCall.addArgument( "Window.Type.TIME" );
+                        windowCall.addArgument( "" + TimeUtils.parseTimeString( behaviorDescr.getParameters().get( 0 ) ) );
+                    }
+                    if ( Behavior.BehaviorType.LENGTH_WINDOW.matches( behaviorDescr.getSubType() ) ) {
+                        windowCall.addArgument( "Window.Type.LENGTH" );
+                        windowCall.addArgument( "" + Integer.valueOf( behaviorDescr.getParameters().get( 0 ) ) );
+                    }
+                    declarationOfCall.addArgument( windowCall );
                 }
 
                 AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
@@ -333,8 +348,7 @@ public class ModelGenerator {
         }
 
         if (pattern.getIdentifier() != null) {
-            String entryPoint = pattern.getSource() instanceof EntryPointDescr ? ( (EntryPointDescr) pattern.getSource() ).getEntryId() : null;
-            context.declarations.put( pattern.getIdentifier(), new DeclarationSpec( patternType, entryPoint ) );
+            context.declarations.put( pattern.getIdentifier(), new DeclarationSpec( patternType, pattern ) );
         }
 
         for (BaseDescr constraint : pattern.getConstraint().getDescrs()) {
@@ -585,11 +599,19 @@ public class ModelGenerator {
 
     public static class DeclarationSpec {
         final Class<?> declarationClass;
-        final String entryPoint;
+        final PatternDescr pattern;
 
-        public DeclarationSpec( Class<?> declarationClass, String entryPoint ) {
+        public DeclarationSpec( Class<?> declarationClass, PatternDescr pattern ) {
             this.declarationClass = declarationClass;
-            this.entryPoint = entryPoint;
+            this.pattern = pattern;
+        }
+
+        String getEntryPoint() {
+            return pattern.getSource() instanceof EntryPointDescr ? ( (EntryPointDescr) pattern.getSource() ).getEntryId() : null;
+        }
+
+        public List<BehaviorDescr> getBehaviors() {
+            return pattern.getBehaviors();
         }
     }
 }

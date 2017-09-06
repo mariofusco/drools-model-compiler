@@ -498,6 +498,38 @@ public class CompilerTest {
     }
 
     @Test
+    public void testSlidingWindow() throws Exception {
+        String str =
+                "import " + StockTick.class.getCanonicalName() + ";\n" +
+                "rule R when\n" +
+                "    $a : StockTick( company == \"DROO\" ) over window:length( 2 )\n" +
+                "then\n" +
+                "  System.out.println(\"fired\");\n" +
+                "end\n";
+
+        KieModuleModel kproj = KieServices.get().newKieModuleModel();
+        kproj.newKieBaseModel( "kb" )
+             .setDefault( true )
+             .setEventProcessingMode( EventProcessingOption.STREAM )
+             .newKieSessionModel( "ks" )
+             .setDefault( true ).setClockType( ClockTypeOption.get( ClockType.PSEUDO_CLOCK.getId() ) );
+
+        KieSession ksession = getKieSession( str, kproj );
+        SessionPseudoClock clock = ksession.getSessionClock();
+
+        clock.advanceTime( 1, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("DROO") );
+        clock.advanceTime( 1, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("DROO") );
+        clock.advanceTime( 1, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("ACME") );
+        clock.advanceTime( 1, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("DROO") );
+
+        assertEquals(2, ksession.fireAllRules());
+    }
+
+    @Test
     public void testNot() {
         String str =
                 "import " + Person.class.getCanonicalName() + ";" +

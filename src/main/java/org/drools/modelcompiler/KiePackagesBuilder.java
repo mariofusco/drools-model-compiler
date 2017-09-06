@@ -33,6 +33,7 @@ import org.drools.core.base.extractors.SelfReferenceClassFieldReader;
 import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.rule.Accumulate;
+import org.drools.core.rule.Behavior;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.EntryPointId;
 import org.drools.core.rule.GroupElement;
@@ -40,6 +41,8 @@ import org.drools.core.rule.MultiAccumulate;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.rule.SingleAccumulate;
+import org.drools.core.rule.SlidingLengthWindow;
+import org.drools.core.rule.SlidingTimeWindow;
 import org.drools.core.ruleunit.RuleUnitUtil;
 import org.drools.core.spi.Accumulator;
 import org.drools.core.spi.GlobalExtractor;
@@ -147,8 +150,7 @@ public class KiePackagesBuilder {
         String unitClassName = ctx.getRule().getRuleUnitClassName();
         for (Variable<?> var : view.getBoundVariables()) {
             if ( var instanceof DeclarationImpl && var.getType().asClass().getName().equals( unitClassName ) ) {
-                ( (DeclarationImpl) var ).setEntryPoint( RuleUnitUtil.RULE_UNIT_ENTRY_POINT );
-                return var;
+                return ( (DeclarationImpl) var ).setEntryPoint( RuleUnitUtil.RULE_UNIT_ENTRY_POINT );
             }
         }
         try {
@@ -234,8 +236,23 @@ public class KiePackagesBuilder {
                                        patternVariable.getName(),
                                        true );
 
-        if (patternVariable instanceof org.drools.model.Declaration && ( (org.drools.model.Declaration) patternVariable ).getEntryPoint() != null) {
-            pattern.setSource( new EntryPointId( ( (org.drools.model.Declaration) patternVariable ).getEntryPoint() ) );
+        if ( patternVariable instanceof org.drools.model.Declaration ) {
+            org.drools.model.Declaration decl = (org.drools.model.Declaration) patternVariable;
+            if ( decl.getEntryPoint() != null ) {
+                pattern.setSource( new EntryPointId( ( (org.drools.model.Declaration) patternVariable ).getEntryPoint() ) );
+            }
+            if ( decl.getWindow() != null ) {
+                Behavior window = null;
+                switch (decl.getWindow().getType()) {
+                    case LENGTH:
+                        window = new SlidingLengthWindow( (int) decl.getWindow().getValue() );
+                        break;
+                    case TIME:
+                        window = new SlidingTimeWindow( decl.getWindow().getValue() );
+                        break;
+                }
+                pattern.addBehavior( window );
+            }
         }
         ctx.registerPattern( patternVariable, pattern );
         return pattern;
