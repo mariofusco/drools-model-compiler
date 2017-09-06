@@ -29,6 +29,7 @@ import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
 import org.drools.core.ClockType;
 import org.drools.core.reteoo.AlphaNode;
 import org.drools.modelcompiler.builder.CanonicalModelKieProject;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -504,6 +505,53 @@ public class CompilerTest {
                 "import " + Result.class.getCanonicalName() + ";" +
                 "rule R when\n" +
                 "  not( Person( name.length == 4 ) )\n" +
+                "then\n" +
+                "  insert(new Result(\"ok\"));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("ok", results.get(0).getValue());
+    }
+
+    @Test
+    @Ignore("Empty not test is broken")
+    public void testNotEmptyPredicate() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "import " + Result.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  not( Person( ) )\n" +
+                "then\n" +
+                "  insert(new Result(\"ok\"));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(0, results.size());
+        assertEquals("ok", results.get(0).getValue());
+    }
+
+    @Test
+    public void testExists() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "import " + Result.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  exists Person( name.length == 5 )\n" +
                 "then\n" +
                 "  insert(new Result(\"ok\"));\n" +
                 "end";

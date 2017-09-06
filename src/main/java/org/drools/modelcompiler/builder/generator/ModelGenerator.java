@@ -32,6 +32,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.drools.javaparser.JavaParser;
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
@@ -49,7 +50,6 @@ import org.drools.core.util.ClassUtils;
 import org.drools.core.util.index.IndexUtil;
 import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.drools.drlx.DrlxParser;
-import org.drools.javaparser.JavaParser;
 import org.drools.javaparser.ast.Modifier;
 import org.drools.javaparser.ast.body.MethodDeclaration;
 import org.drools.javaparser.ast.body.Parameter;
@@ -72,6 +72,13 @@ import org.drools.javaparser.ast.stmt.ExpressionStmt;
 import org.drools.javaparser.ast.stmt.ReturnStmt;
 import org.drools.javaparser.ast.type.ClassOrInterfaceType;
 import org.drools.javaparser.ast.type.UnknownType;
+import org.drools.compiler.compiler.DrlExprParser;
+import org.drools.core.definitions.InternalKnowledgePackage;
+import org.drools.core.rule.Pattern;
+import org.drools.core.util.ClassUtils;
+import org.drools.core.util.index.IndexUtil;
+import org.drools.core.util.index.IndexUtil.ConstraintType;
+import org.drools.drlx.DrlxParser;
 import org.drools.model.BitMask;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
@@ -284,6 +291,8 @@ public class ModelGenerator {
             visit( context, ( (PatternDescr) descr ));
         } else if ( descr instanceof NotDescr ) {
             visit( context, ( (NotDescr) descr ));
+        } else if ( descr instanceof ExistsDescr) {
+            visit( context, ( (ExistsDescr) descr ));
         } else {
             throw new UnsupportedOperationException("TODO"); // TODO
         }
@@ -295,6 +304,17 @@ public class ModelGenerator {
         context.pushExprPointer( notDSL::addArgument );
         for (BaseDescr subDescr : descr.getDescrs()) {
             visit( context, subDescr );
+        }
+        context.popExprPointer();
+    }
+
+    private static void visit( RuleContext context, ExistsDescr descr ) {
+        final MethodCallExpr existsDSL = new MethodCallExpr(null, "exists");
+        context.addExpression(existsDSL);
+        context.pushExprPointer( existsDSL::addArgument );
+        for (Object subDescr : descr.getDescrs()) {
+            if(subDescr instanceof BaseDescr)
+                visit( context, (BaseDescr)subDescr );
         }
         context.popExprPointer();
     }
