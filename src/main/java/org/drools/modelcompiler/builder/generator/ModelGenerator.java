@@ -365,12 +365,27 @@ public class ModelGenerator {
             context.declarations.put( pattern.getIdentifier(), new DeclarationSpec( patternType, pattern ) );
         }
 
-        for (BaseDescr constraint : pattern.getConstraint().getDescrs()) {
-            String expression = constraint.toString();
-            Expression dslExpr = drlxParse(context, patternType, pattern.getIdentifier(), expression);
-
+        if (pattern.getConstraint().getDescrs().isEmpty()) {
+            MethodCallExpr dslExpr = new MethodCallExpr(null, "input");
+            if (pattern.getIdentifier() != null) {
+                dslExpr.addArgument(new NameExpr("var_"+pattern.getIdentifier()));
+            } else {
+                MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
+                MethodCallExpr typeCall = new MethodCallExpr(null, "type");
+                typeCall.addArgument( new ClassExpr( JavaParser.parseClassOrInterfaceType(patternType.getCanonicalName()) ));
+                declarationOfCall.addArgument(typeCall);
+                dslExpr.addArgument( declarationOfCall );
+            }
             System.out.println("Adding newExpression: "+dslExpr);
             context.addExpression( dslExpr );
+        } else { 
+            for (BaseDescr constraint : pattern.getConstraint().getDescrs()) {
+                String expression = constraint.toString();
+                Expression dslExpr = drlxParse(context, patternType, pattern.getIdentifier(), expression);
+    
+                System.out.println("Adding newExpression: "+dslExpr);
+                context.addExpression( dslExpr );
+            }
         }
     }
 
