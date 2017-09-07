@@ -19,20 +19,27 @@ package org.drools.modelcompiler;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.rule.Pattern;
 import org.drools.model.Variable;
 
 public class RuleContext {
 
+    private final KnowledgePackageImpl pkg;
     private final RuleImpl rule;
 
     private final Map<Variable, Pattern> patterns = new HashMap<>();
 
     private int patternIndex = -1;
 
-    RuleContext( RuleImpl rule ) {
+    RuleContext( KnowledgePackageImpl pkg, RuleImpl rule ) {
+        this.pkg = pkg;
         this.rule = rule;
+    }
+
+    public KnowledgePackageImpl getPkg() {
+        return pkg;
     }
 
     public RuleImpl getRule() {

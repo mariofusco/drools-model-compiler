@@ -19,20 +19,18 @@ package org.drools.modelcompiler.builder.generator;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.drools.model.impl.NamesGenerator.generateName;
+
 public class DRLExprIdGenerator {
     private Map<PatternTypeDRLConstraint, String> generatedExprIds = new HashMap<>();
     
     public String getExprId(Class<?> patternType, String drlConstraint) {
         PatternTypeDRLConstraint key = PatternTypeDRLConstraint.of(patternType, drlConstraint);
-        return generatedExprIds.computeIfAbsent(key, this::generateNewId);
+        return generatedExprIds.computeIfAbsent(key, k -> generateNewId());
     }
     
-    private String generateNewId(PatternTypeDRLConstraint key) {
-        String id = "1";
-        while ( generatedExprIds.values().contains(id) ) {
-            id = "" + (Long.valueOf(id) + 1);
-        }
-        return id;
+    private String generateNewId() {
+        return generateName("expr");
     }
     
     @Override

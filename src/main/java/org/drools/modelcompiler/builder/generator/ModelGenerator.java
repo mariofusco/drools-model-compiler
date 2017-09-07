@@ -16,6 +16,22 @@
 
 package org.drools.modelcompiler.builder.generator;
 
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
@@ -67,22 +83,6 @@ import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import static org.drools.javaparser.printer.PrintUtil.toDrlx;
 import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
@@ -122,7 +122,9 @@ public class ModelGenerator {
                 typeCall.addArgument( new ClassExpr( declType ));
                 declarationOfCall.addArgument(typeCall);
                 if (decl.getValue().getEntryPoint() != null) {
-                    declarationOfCall.addArgument( new StringLiteralExpr( decl.getValue().getEntryPoint() ) );
+                    MethodCallExpr entryPointCall = new MethodCallExpr(null, "entryPoint");
+                    entryPointCall.addArgument( new StringLiteralExpr( decl.getValue().getEntryPoint() ) );
+                    declarationOfCall.addArgument( entryPointCall );
                 }
                 for ( BehaviorDescr behaviorDescr : decl.getValue().getBehaviors() ) {
                     MethodCallExpr windowCall = new MethodCallExpr(null, "window");

@@ -43,6 +43,7 @@ import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.rule.SingleAccumulate;
 import org.drools.core.rule.SlidingLengthWindow;
 import org.drools.core.rule.SlidingTimeWindow;
+import org.drools.core.rule.WindowDeclaration;
 import org.drools.core.ruleunit.RuleUnitUtil;
 import org.drools.core.spi.Accumulator;
 import org.drools.core.spi.GlobalExtractor;
@@ -52,6 +53,7 @@ import org.drools.model.AccumulatePattern;
 import org.drools.model.Condition;
 import org.drools.model.Consequence;
 import org.drools.model.Constraint;
+import org.drools.model.EntryPoint;
 import org.drools.model.Global;
 import org.drools.model.Model;
 import org.drools.model.OOPath;
@@ -59,6 +61,10 @@ import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
 import org.drools.model.View;
+import org.drools.model.WindowDefinition;
+import org.drools.model.WindowReference;
+import org.drools.model.constraints.SingleConstraint1;
+import org.drools.model.functions.Predicate1;
 import org.drools.model.impl.DeclarationImpl;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
@@ -71,8 +77,8 @@ import org.kie.api.definition.type.Role;
 import org.kie.api.definition.type.Role.Type;
 
 import static org.drools.core.rule.Pattern.getReadAcessor;
-import static org.drools.model.DSL.declarationOf;
-import static org.drools.model.DSL.type;
+import static org.drools.model.DSL.*;
+import static org.drools.model.impl.NamesGenerator.generateName;
 import static org.drools.modelcompiler.ModelCompilerUtil.conditionToGroupElementType;
 
 public class KiePackagesBuilder {
@@ -120,7 +126,7 @@ public class KiePackagesBuilder {
             ruleImpl.setRuleUnitClassName( rule.getUnit() );
             pkg.getRuleUnitRegistry().getRuleUnitFor( ruleImpl );
         }
-        RuleContext ctx = new RuleContext( ruleImpl );
+        RuleContext ctx = new RuleContext( pkg, ruleImpl );
         populateLHS( ctx, pkg, rule.getView() );
         processConsequence( ctx, rule.getConsequence() );
         return ruleImpl;
@@ -150,11 +156,11 @@ public class KiePackagesBuilder {
         String unitClassName = ctx.getRule().getRuleUnitClassName();
         for (Variable<?> var : view.getBoundVariables()) {
             if ( var instanceof DeclarationImpl && var.getType().asClass().getName().equals( unitClassName ) ) {
-                return ( (DeclarationImpl) var ).setEntryPoint( RuleUnitUtil.RULE_UNIT_ENTRY_POINT );
+                return ( (DeclarationImpl) var ).setSource( entryPoint( RuleUnitUtil.RULE_UNIT_ENTRY_POINT ) );
             }
         }
         try {
-            return declarationOf( type( pkg.getTypeResolver().resolveType( unitClassName ) ), RuleUnitUtil.RULE_UNIT_ENTRY_POINT );
+            return declarationOf( type( pkg.getTypeResolver().resolveType( unitClassName ) ), entryPoint( RuleUnitUtil.RULE_UNIT_ENTRY_POINT ) );
         } catch (ClassNotFoundException e) {
             throw new RuntimeException( e );
         }
@@ -238,24 +244,49 @@ public class KiePackagesBuilder {
 
         if ( patternVariable instanceof org.drools.model.Declaration ) {
             org.drools.model.Declaration decl = (org.drools.model.Declaration) patternVariable;
-            if ( decl.getEntryPoint() != null ) {
-                pattern.setSource( new EntryPointId( ( (org.drools.model.Declaration) patternVariable ).getEntryPoint() ) );
+            if ( decl.getSource() != null ) {
+                if ( decl.getSource() instanceof EntryPoint ) {
+                    pattern.setSource( new EntryPointId( ( (EntryPoint) decl.getSource() ).getName() ) );
+                } else if ( decl.getSource() instanceof WindowReference ) {
+                    WindowReference<?> window = (WindowReference) decl.getSource();
+                    if ( !ctx.getPkg().getWindowDeclarations().containsKey( window.getName() ) ) {
+                        createWindowReference( ctx, window );
+                    }
+                    pattern.setSource( new org.drools.core.rule.WindowReference( window.getName() ) );
+                } else {
+                    throw new UnsupportedOperationException( "Unknown source: " + decl.getSource() );
+                }
             }
             if ( decl.getWindow() != null ) {
-                Behavior window = null;
-                switch (decl.getWindow().getType()) {
-                    case LENGTH:
-                        window = new SlidingLengthWindow( (int) decl.getWindow().getValue() );
-                        break;
-                    case TIME:
-                        window = new SlidingTimeWindow( decl.getWindow().getValue() );
-                        break;
-                }
-                pattern.addBehavior( window );
+                pattern.addBehavior( createWindow( decl.getWindow() ) );
             }
         }
         ctx.registerPattern( patternVariable, pattern );
         return pattern;
+    }
+
+    private <T> void createWindowReference( RuleContext ctx, WindowReference<T> window ) {
+        WindowDeclaration windowDeclaration = new WindowDeclaration( window.getName(), ctx.getPkg().getName() );
+        Variable<T> variable = declarationOf( type( window.getPatternType() ) );
+        Pattern windowPattern = new Pattern(0, getObjectType( window.getPatternType() ), variable.getName() );
+        windowDeclaration.setPattern( windowPattern );
+        for ( Predicate1<T> predicate : window.getPredicates()) {
+            SingleConstraint singleConstraint = new SingleConstraint1<>( generateName("expr"), variable, predicate );
+            ConstraintEvaluator constraintEvaluator = new ConstraintEvaluator( windowPattern, singleConstraint );
+            windowPattern.addConstraint( new LambdaConstraint( constraintEvaluator ) );
+        }
+        windowPattern.addBehavior( createWindow( window ) );
+        ctx.getPkg().addWindowDeclaration(windowDeclaration);
+    }
+
+    private Behavior createWindow( WindowDefinition window ) {
+        switch (window.getType()) {
+            case LENGTH:
+                return new SlidingLengthWindow( (int) window.getValue() );
+            case TIME:
+                return new SlidingTimeWindow( window.getValue() );
+        }
+        throw new IllegalArgumentException( "Unknown window type: " + window.getType() );
     }
 
     private void addConstraintsToPattern( RuleContext ctx, Pattern pattern, org.drools.model.Pattern modelPattern, Constraint constraint ) {

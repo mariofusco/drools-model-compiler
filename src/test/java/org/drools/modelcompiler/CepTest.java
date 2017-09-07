@@ -25,6 +25,7 @@ import org.drools.model.Model;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
 import org.drools.model.Window;
+import org.drools.model.WindowReference;
 import org.drools.model.impl.ModelImpl;
 import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.junit.Test;
@@ -228,8 +229,8 @@ public class CepTest {
 
     @Test
     public void testAfterWithEntryPointsWithModel() throws Exception {
-        Variable<StockTick> drooV = declarationOf( type( StockTick.class ), "ep1" );
-        Variable<StockTick> acmeV = declarationOf( type( StockTick.class ), "ep2" );
+        Variable<StockTick> drooV = declarationOf( type( StockTick.class ), entryPoint( "ep1" ) );
+        Variable<StockTick> acmeV = declarationOf( type( StockTick.class ), entryPoint( "ep2" ) );
 
         Rule rule = rule( "after" )
                 .view(
@@ -272,7 +273,7 @@ public class CepTest {
         String drl =
                 "import " + StockTick.class.getCanonicalName() + ";\n" +
                 "rule R when\n" +
-                "    $a : StockTick( company == \"DROO\" ) over window:length( 2 )\n" +
+                "    $a : StockTick( company == \"DROO\" ) over window:time( 5s )\n" +
                 "then\n" +
                 "  System.out.println(\"fired\");\n" +
                 "end\n";
@@ -287,13 +288,13 @@ public class CepTest {
 
         SessionPseudoClock clock = ksession.getSessionClock();
 
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("ACME") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
 
         assertEquals(2, ksession.fireAllRules());
@@ -301,15 +302,15 @@ public class CepTest {
 
     @Test
     public void testSlidingWindowWithModel() throws Exception {
-        Variable<StockTick> drooV = declarationOf( type( StockTick.class ), window( Window.Type.LENGTH, 2 ) );
+        Variable<StockTick> drooV = declarationOf( type( StockTick.class ), window( Window.Type.TIME, 5, TimeUnit.SECONDS ) );
 
-        Rule rule = rule( "after" )
+        Rule rule = rule( "window" )
                 .view(
-                        expr("exprA", drooV, s -> s.getCompany().equals("DROO"))
+                        expr("exprA", drooV, s -> s.getCompany().equals( "DROO" ))
                                 .indexedBy( String.class, ConstraintType.EQUAL, StockTick::getCompany, "DROO" )
                                 .reactOn( "company" )
                      )
-                .then(execute(() -> System.out.println("fired")));
+                .then(on(drooV).execute(s -> System.out.println(s.getCompany())));
 
         Model model = new ModelImpl().addRule( rule );
         KieBase kbase = KieBaseBuilder.createKieBaseFromModel( model, EventProcessingOption.STREAM );
@@ -320,13 +321,13 @@ public class CepTest {
 
         SessionPseudoClock clock = ksession.getSessionClock();
 
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("ACME") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
 
         assertEquals(2, ksession.fireAllRules());
@@ -337,7 +338,7 @@ public class CepTest {
         String drl =
                 "import " + StockTick.class.getCanonicalName() + ";\n" +
                 "declare window DeclaredWindow\n" +
-                "    StockTick( company == \"DROO\" ) over window:length( 2 )\n" +
+                "    StockTick( company == \"DROO\" ) over window:time( 5s )\n" +
                 "end\n" +
                 "rule R when\n" +
                 "    $a : StockTick() from window DeclaredWindow\n" +
@@ -355,13 +356,45 @@ public class CepTest {
 
         SessionPseudoClock clock = ksession.getSessionClock();
 
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("ACME") );
-        clock.advanceTime( 1, TimeUnit.SECONDS );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("DROO") );
+
+        assertEquals(2, ksession.fireAllRules());
+    }
+
+    @Test
+    public void testDeclaredSlidingWindowWithModel() throws Exception {
+        WindowReference window = window( Window.Type.TIME, 5, TimeUnit.SECONDS, StockTick.class, s -> s.getCompany().equals( "DROO" ) );
+        Variable<StockTick> drooV = declarationOf( type( StockTick.class ), window );
+
+        Rule rule = rule( "window" )
+                .view(
+                        input(drooV)
+                     )
+                .then(on(drooV).execute(s -> System.out.println(s.getCompany())));
+
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kbase = KieBaseBuilder.createKieBaseFromModel( model, EventProcessingOption.STREAM );
+
+        KieSessionConfiguration sessionConfig = KnowledgeBaseFactory.newKnowledgeSessionConfiguration();
+        sessionConfig.setOption( ClockTypeOption.get( ClockType.PSEUDO_CLOCK.getId() ) );
+        KieSession ksession = kbase.newKieSession( sessionConfig, null );
+
+        SessionPseudoClock clock = ksession.getSessionClock();
+
+        clock.advanceTime( 2, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("DROO") );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("DROO") );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
+        ksession.insert( new StockTick("ACME") );
+        clock.advanceTime( 2, TimeUnit.SECONDS );
         ksession.insert( new StockTick("DROO") );
 
         assertEquals(2, ksession.fireAllRules());

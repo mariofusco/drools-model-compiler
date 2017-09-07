@@ -20,10 +20,17 @@ public class ConstraintEvaluator {
     private final Pattern pattern;
     private int[] argsPos;
 
+    public ConstraintEvaluator(Pattern pattern, SingleConstraint constraint) {
+        this.constraint = constraint;
+        this.pattern = pattern;
+        this.declarations = new Declaration[] { pattern.getDeclaration() };
+        this.requiredDeclarations = new Declaration[0];
+    }
+
     public ConstraintEvaluator(Declaration[] declarations, Pattern pattern, SingleConstraint constraint) {
         this.constraint = constraint;
-        this.declarations = declarations;
         this.pattern = pattern;
+        this.declarations = declarations;
         this.requiredDeclarations = Stream.of( declarations )
                                           .filter( d -> !d.getIdentifier().equals( pattern.getDeclaration().getIdentifier() ) )
                                           .toArray( Declaration[]::new );
