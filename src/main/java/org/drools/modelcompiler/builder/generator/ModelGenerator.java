@@ -16,22 +16,6 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
@@ -39,6 +23,7 @@ import org.drools.compiler.lang.descr.BaseDescr;
 import org.drools.compiler.lang.descr.BehaviorDescr;
 import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
 import org.drools.compiler.lang.descr.EntryPointDescr;
+import org.drools.compiler.lang.descr.ExistsDescr;
 import org.drools.compiler.lang.descr.NotDescr;
 import org.drools.compiler.lang.descr.OrDescr;
 import org.drools.compiler.lang.descr.PatternDescr;
@@ -81,6 +66,22 @@ import org.drools.model.Variable;
 import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
+
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.drools.javaparser.printer.PrintUtil.toDrlx;
 import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
@@ -291,14 +292,16 @@ public class ModelGenerator {
     }
 
     private static void visit( RuleContext context, BaseDescr descr ) {
-        if ( descr instanceof AndDescr ) {
+        if ( descr instanceof AndDescr) {
             visit( context, ( (AndDescr) descr ));
-        } else if ( descr instanceof OrDescr ) {
+        } else if ( descr instanceof OrDescr) {
             visit( context, ( (OrDescr) descr ));
-        } else if ( descr instanceof PatternDescr ) {
+        } else if ( descr instanceof PatternDescr) {
             visit( context, ( (PatternDescr) descr ));
-        } else if ( descr instanceof NotDescr ) {
+        } else if ( descr instanceof NotDescr) {
             visit( context, ( (NotDescr) descr ));
+        } else if ( descr instanceof ExistsDescr) {
+            visit( context, ( (ExistsDescr) descr ));
         } else {
             throw new UnsupportedOperationException("TODO"); // TODO
         }
@@ -310,6 +313,17 @@ public class ModelGenerator {
         context.pushExprPointer( notDSL::addArgument );
         for (BaseDescr subDescr : descr.getDescrs()) {
             visit( context, subDescr );
+        }
+        context.popExprPointer();
+    }
+
+    private static void visit( RuleContext context, ExistsDescr descr ) {
+        final MethodCallExpr existsDSL = new MethodCallExpr(null, "exists");
+        context.addExpression(existsDSL);
+        context.pushExprPointer( existsDSL::addArgument );
+        for (Object subDescr : descr.getDescrs()) {
+            if(subDescr instanceof BaseDescr)
+                visit( context, (BaseDescr)subDescr );
         }
         context.popExprPointer();
     }
