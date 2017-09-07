@@ -554,7 +554,6 @@ public class CompilerTest {
     }
 
     @Test
-    @Ignore("Empty not test is broken")
     public void testNotEmptyPredicate() {
         String str =
                 "import " + Person.class.getCanonicalName() + ";" +
@@ -574,7 +573,6 @@ public class CompilerTest {
 
         List<Result> results = getObjects(ksession, Result.class);
         assertEquals(0, results.size());
-        assertEquals("ok", results.get(0).getValue());
     }
 
     @Test
@@ -598,5 +596,76 @@ public class CompilerTest {
         List<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
         assertEquals("ok", results.get(0).getValue());
+    }
+    
+    @Test
+    public void testExistsEmptyPredicate() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "import " + Result.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  exists( Person() )\n" +
+                "then\n" +
+                "  insert(new Result(\"ok\"));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mark = new Person("Mark", 37);
+        Person mario = new Person("Mario", 40);
+        
+        ksession.insert(mark);
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("ok", results.get(0).getValue());
+    }
+    
+    @Test
+    public void testEmptyPattern() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "import " + Result.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  Person() \n" +
+                "then\n" +
+                "  insert(new Result(\"ok\"));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("ok", results.get(0).getValue());
+    }
+    
+    @Test
+    public void testEmptyPatternWithBinding() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "import " + Result.class.getCanonicalName() + ";" +
+                "rule R when\n" +
+                "  $p : Person() \n" +
+                "then\n" +
+                "  insert(new Result($p.getName()));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        List<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals("Mario", results.get(0).getValue());
     }
 }
