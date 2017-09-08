@@ -16,6 +16,7 @@
 
 package org.drools.modelcompiler;
 
+import org.drools.core.reteoo.AlphaNode;
 import org.drools.model.Global;
 import org.drools.model.Index.ConstraintType;
 import org.drools.model.Model;
@@ -25,19 +26,25 @@ import org.drools.model.impl.ModelImpl;
 import org.drools.modelcompiler.builder.KieBaseBuilder;
 import org.junit.Test;
 import org.kie.api.KieBase;
+import org.kie.api.runtime.ClassObjectFilter;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.FactHandle;
 
 import static org.drools.model.DSL.*;
 import static org.drools.model.functions.accumulate.Average.avg;
 import static org.drools.model.functions.accumulate.Sum.sum;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.junit.Assert.*;
 
 public class FlowTest {
 
     public static class Result {
         private Object value;
+
+        public Result() { }
+
+        public Result(Object value) {
+            this.value = value;
+        }
 
         public Object getValue() {
             return value;
@@ -354,5 +361,28 @@ public class FlowTest {
 
         ksession.fireAllRules();
         assertEquals("Mark is 37", result.value);
+    }
+
+    @Test
+    public void testNotEmptyPredicate() {
+        Rule rule = rule("R")
+                .view(not(input(declarationOf(type(Person.class)))))
+                .then(execute((drools) -> {
+            drools.insert(new Result("ok"));
+        }));
+
+        Model model = new ModelImpl().addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ReteDumper.checkRete(ksession, node -> !(node instanceof AlphaNode) );
+
+        Person mario = new Person("Mario", 40);
+
+        ksession.insert(mario);
+        ksession.fireAllRules();
+
+        assertTrue( ksession.getObjects(new ClassObjectFilter( Result.class ) ).isEmpty() );
     }
 }

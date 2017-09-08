@@ -17,19 +17,18 @@
 package org.drools.modelcompiler;
 
 import java.io.File;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
 import org.drools.core.ClockType;
 import org.drools.core.reteoo.AlphaNode;
 import org.drools.modelcompiler.builder.CanonicalModelKieProject;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -45,6 +44,7 @@ import org.kie.api.builder.model.KieBaseModel;
 import org.kie.api.builder.model.KieModuleModel;
 import org.kie.api.builder.model.KieSessionModel;
 import org.kie.api.conf.EventProcessingOption;
+import org.kie.api.runtime.ClassObjectFilter;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.conf.ClockTypeOption;
@@ -305,8 +305,8 @@ public class CompilerTest {
         assertEquals( "Found: Mark", result.getValue() );
     }
    
-    public static <T> List<T> getObjects(KieSession ksession, Class<T> clazz) {
-        return (List<T>) ksession.getObjects(clazz::isInstance).stream().collect(Collectors.toList());
+    public static <T> Collection<T> getObjects( KieSession ksession, Class<T> clazz ) {
+        return (Collection<T>) ksession.getObjects(new ClassObjectFilter( clazz ));
     }
     
     @Test
@@ -327,9 +327,9 @@ public class CompilerTest {
         ksession.insert(new Person("Mario", 40));
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("Mark", results.get(0).getValue());
+        assertEquals("Mark", results.iterator().next().getValue());
     }
     
     @Test
@@ -351,9 +351,9 @@ public class CompilerTest {
         ksession.insert(new Person("Mario", 40));
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("Mark", results.get(0).getValue());
+        assertEquals("Mark", results.iterator().next().getValue());
         assertEquals(1, getObjects(ksession, Person.class).size());
     }
     
@@ -376,9 +376,9 @@ public class CompilerTest {
         ksession.insert(new Person("Mario", 40));
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("Mark", results.get(0).getValue());
+        assertEquals("Mark", results.iterator().next().getValue());
         assertEquals(1, getObjects(ksession, Person.class).size());
     }
 
@@ -548,9 +548,9 @@ public class CompilerTest {
         ksession.insert(mario);
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("ok", results.get(0).getValue());
+        assertEquals("ok", results.iterator().next().getValue());
     }
 
     @Test
@@ -566,12 +566,14 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
+        ReteDumper.dumpRete( ksession );
+
         Person mario = new Person("Mario", 40);
 
         ksession.insert(mario);
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(0, results.size());
     }
 
@@ -593,9 +595,9 @@ public class CompilerTest {
         ksession.insert(mario);
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("ok", results.get(0).getValue());
+        assertEquals("ok", results.iterator().next().getValue());
     }
     
     @Test
@@ -618,9 +620,9 @@ public class CompilerTest {
         ksession.insert(mario);
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("ok", results.get(0).getValue());
+        assertEquals("ok", results.iterator().next().getValue());
     }
     
     @Test
@@ -641,9 +643,9 @@ public class CompilerTest {
         ksession.insert(mario);
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("ok", results.get(0).getValue());
+        assertEquals("ok", results.iterator().next().getValue());
     }
     
     @Test
@@ -664,8 +666,8 @@ public class CompilerTest {
         ksession.insert(mario);
         ksession.fireAllRules();
 
-        List<Result> results = getObjects(ksession, Result.class);
+        Collection<Result> results = getObjects(ksession, Result.class);
         assertEquals(1, results.size());
-        assertEquals("Mario", results.get(0).getValue());
+        assertEquals("Mario", results.iterator().next().getValue());
     }
 }
