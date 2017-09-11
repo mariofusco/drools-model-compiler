@@ -16,23 +16,8 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import org.drools.compiler.compiler.DrlExprParser;
+import org.drools.compiler.lang.descr.AccumulateDescr;
 import org.drools.compiler.lang.descr.AndDescr;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
 import org.drools.compiler.lang.descr.BaseDescr;
@@ -43,6 +28,7 @@ import org.drools.compiler.lang.descr.ExistsDescr;
 import org.drools.compiler.lang.descr.NotDescr;
 import org.drools.compiler.lang.descr.OrDescr;
 import org.drools.compiler.lang.descr.PatternDescr;
+import org.drools.compiler.lang.descr.PatternSourceDescr;
 import org.drools.compiler.lang.descr.RelationalExprDescr;
 import org.drools.compiler.lang.descr.RuleDescr;
 import org.drools.core.definitions.InternalKnowledgePackage;
@@ -83,6 +69,22 @@ import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import static org.drools.javaparser.printer.PrintUtil.toDrlx;
 import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
@@ -90,7 +92,7 @@ public class ModelGenerator {
 
     private static final ClassOrInterfaceType RULE_TYPE = JavaParser.parseClassOrInterfaceType( Rule.class.getCanonicalName() );
     private static final ClassOrInterfaceType BITMASK_TYPE = JavaParser.parseClassOrInterfaceType( BitMask.class.getCanonicalName() );
-    
+
     public static final boolean GENERATE_EXPR_ID = true;
 
     public static PackageModel generateModel( InternalKnowledgePackage pkg, List<RuleDescrImpl> rules ) {
@@ -113,10 +115,10 @@ public class ModelGenerator {
             for ( Entry<String, DeclarationSpec> decl : context.declarations.entrySet() ) {
                 ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
                 ClassOrInterfaceType declType = JavaParser.parseClassOrInterfaceType( decl.getValue().declarationClass.getCanonicalName() );
-                
+
                 varType.setTypeArguments(declType);
                 VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "var_" + decl.getKey(), Modifier.FINAL);
-                
+
                 MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
                 MethodCallExpr typeCall = new MethodCallExpr(null, "type");
                 typeCall.addArgument( new ClassExpr( declType ));
@@ -144,10 +146,10 @@ public class ModelGenerator {
             }
 
             VariableDeclarationExpr ruleVar = new VariableDeclarationExpr( RULE_TYPE, "rule");
-            
+
             MethodCallExpr ruleCall = new MethodCallExpr(null, "rule");
             ruleCall.addArgument( new StringLiteralExpr( ruleDescr.getName() ) );
-             
+
             MethodCallExpr viewCall = new MethodCallExpr(ruleCall, "view");
             context.expressions.forEach(viewCall::addArgument);
 
@@ -155,9 +157,9 @@ public class ModelGenerator {
             BlockStmt ruleConsequence = JavaParser.parseBlock( "{" + ruleConsequenceAsBlock + "}" );
             List<String> declUsedInRHS = ruleConsequence.getChildNodesByType(NameExpr.class).stream().map(NameExpr::getNameAsString).collect(Collectors.toList());
             List<String> verifiedDeclUsedInRHS = context.declarations.keySet().stream().filter(declUsedInRHS::contains).collect(Collectors.toList());
-            
+
             boolean rhsRewritten = rewriteRHS(context, ruleBlock, ruleConsequence);
-            
+
             MethodCallExpr thenCall = new MethodCallExpr(viewCall, "then");
             MethodCallExpr onCall = null;
 
@@ -173,14 +175,14 @@ public class ModelGenerator {
             if (rhsRewritten) {
                 executeLambda.addParameter(new Parameter(new UnknownType(), "drools"));
             }
-            verifiedDeclUsedInRHS.stream().map(x -> new Parameter(new UnknownType(), x)).forEach(executeLambda::addParameter);    
+            verifiedDeclUsedInRHS.stream().map(x -> new Parameter(new UnknownType(), x)).forEach(executeLambda::addParameter);
             executeLambda.setBody( ruleConsequence );
 
             thenCall.addArgument( executeCall );
-            
+
             AssignExpr ruleAssign = new AssignExpr(ruleVar, thenCall, AssignExpr.Operator.ASSIGN);
             ruleBlock.addStatement(ruleAssign);
-            
+
             ruleBlock.addStatement( new ReturnStmt("rule") );
             System.out.println(ruleMethod);
             packageModel.putRuleMethod("rule_" + toId( ruleDescr.getName() ), ruleMethod);
@@ -304,11 +306,38 @@ public class ModelGenerator {
             visit( context, ( (NotDescr) descr ));
         } else if ( descr instanceof ExistsDescr) {
             visit( context, ( (ExistsDescr) descr ));
+        } else if ( descr instanceof AccumulateDescr) {
+            visit( context, ( (AccumulateDescr) descr ));
         } else {
             throw new UnsupportedOperationException("TODO"); // TODO
         }
     }
-    
+
+    private static void visit( RuleContext context, AccumulateDescr descr ) {
+        final MethodCallExpr accumulateDSL = new MethodCallExpr(null, "accumulate");
+        context.addExpression(accumulateDSL);
+        context.pushExprPointer( accumulateDSL::addArgument );
+        visit(context, descr.getInputPattern());
+        for(AccumulateDescr.AccumulateFunctionCallDescr function: descr.getFunctions()) {
+            visit(context, function, accumulateDSL);
+        }
+        context.popExprPointer();
+    }
+
+    private static void visit(RuleContext context, AccumulateDescr.AccumulateFunctionCallDescr function, MethodCallExpr accumulateDSL) {
+        context.pushExprPointer(accumulateDSL::addArgument);
+        final MethodCallExpr functionDSL = new MethodCallExpr(null, function.getFunction());
+        context.addExpression(functionDSL);
+
+        context.pushExprPointer(functionDSL::addArgument);
+
+        context.popExprPointer();
+
+        context.popExprPointer();
+
+
+    }
+
     private static void visit( RuleContext context, NotDescr descr ) {
         final MethodCallExpr notDSL = new MethodCallExpr(null, "not");
         context.addExpression(notDSL);
@@ -344,7 +373,7 @@ public class ModelGenerator {
             context.popExprPointer();
         }
     }
-    
+
     private static void visit( RuleContext context, OrDescr descr ) {
         final MethodCallExpr orDSL = new MethodCallExpr(null, "or");
         context.addExpression(orDSL);
@@ -356,6 +385,14 @@ public class ModelGenerator {
     }
 
     private static void visit(RuleContext context, PatternDescr pattern ) {
+
+        // Accumulate has a PatternDescr that should be ignore with inside the AccumulateDescr
+        PatternSourceDescr source = pattern.getSource();
+        if(source != null) {
+            visit(context, source);
+            return;
+        }
+
         Class<?> patternType;
         try {
             patternType = context.pkg.getTypeResolver().resolveType( pattern.getObjectType() );
@@ -380,11 +417,11 @@ public class ModelGenerator {
             }
             System.out.println("Adding newExpression: "+dslExpr);
             context.addExpression( dslExpr );
-        } else { 
+        } else {
             for (BaseDescr constraint : pattern.getConstraint().getDescrs()) {
                 String expression = constraint.toString();
                 Expression dslExpr = drlxParse(context, patternType, pattern.getIdentifier(), expression);
-    
+
                 System.out.println("Adding newExpression: "+dslExpr);
                 context.addExpression( dslExpr );
             }
@@ -456,7 +493,13 @@ public class ModelGenerator {
             return buildDslExpression( patternType, exprId, bindingId, null, usedDeclarations, reactOnProperties, null, null, methodCallExpr, true );
         }
 
+        if (drlxExpr instanceof MethodCallExpr) {
+            MethodCallExpr methodCallExpr = (MethodCallExpr)drlxExpr;
+            return buildDslExpression(patternType, exprId, bindingId, null, new HashSet<>(), new HashSet<>(), null, null, methodCallExpr, false);
+        }
+
         throw new UnsupportedOperationException("Unknown expression: " + toDrlx(drlxExpr)); // TODO
+
     }
 
     private static void addArgumentToMethodCall( Expression expr, MethodCallExpr methodCallExpr ) {
@@ -514,7 +557,7 @@ public class ModelGenerator {
             exprDSL.addArgument( new StringLiteralExpr(exprId) );
         }
         if (bindingId != null) {
-            exprDSL.addArgument( new NameExpr("var_" + bindingId) );    
+            exprDSL.addArgument( new NameExpr("var_" + bindingId) );
         } else {
             MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
             MethodCallExpr typeCall = new MethodCallExpr(null, "type");
@@ -535,23 +578,23 @@ public class ModelGenerator {
         }
 
         exprDSL.addArgument(exprArg);
-        
+
         Expression result = exprDSL;
-        
-        
+
+
         // -- all indexing stuff --
         // .indexBy(..) is only added if left is not an identity expression:
         if ( decodeConstraintType != null && !(left.getExpression() instanceof NameExpr && ((NameExpr)left.getExpression()).getName().getIdentifier().equals("_this")) ) {
             Class<?> indexType = Stream.of( left, right ).map( TypedExpression::getType )
                                        .flatMap( ModelGenerator::optToStream )
                                        .findFirst().get();
-            
+
             ClassExpr indexedBy_indexedClass = new ClassExpr( JavaParser.parseType( indexType.getCanonicalName() ) );
             FieldAccessExpr indexedBy_constraintType = new FieldAccessExpr( new NameExpr( "org.drools.model.Index.ConstraintType" ), decodeConstraintType.toString()); // not 100% accurate as the type in "nameExpr" is actually parsed if it was JavaParsers as a big chain of FieldAccessExpr
             LambdaExpr indexedBy_leftOperandExtractor = new LambdaExpr();
             indexedBy_leftOperandExtractor.addParameter(new Parameter(new UnknownType(), "_this"));
             indexedBy_leftOperandExtractor.setBody( new ExpressionStmt( left.getExpression() ) );
-    
+
             MethodCallExpr indexedByDSL = new MethodCallExpr(exprDSL, "indexedBy");
             indexedByDSL.addArgument( indexedBy_indexedClass );
             indexedByDSL.addArgument( indexedBy_constraintType );
@@ -571,7 +614,7 @@ public class ModelGenerator {
         }
         // -- END all indexing stuff --
 
-        
+
         // -- all reactOn stuff --
         if ( !reactOnProperties.isEmpty() ) {
             MethodCallExpr reactOnDSL = new MethodCallExpr(result, "reactOn");
@@ -622,7 +665,7 @@ public class ModelGenerator {
         public InternalKnowledgePackage getPkg() {
             return pkg;
         }
-        
+
         public String getExprId(Class<?> patternType, String drlConstraint) {
             return exprIdGenerator.getExprId(patternType, drlConstraint);
         }
