@@ -117,6 +117,13 @@ public class PackageModel {
                 "    }\n");
         rulesClass.addMember(getGlobalsMethod);
         
+        BodyDeclaration<?> getQueriesMethod = JavaParser.parseBodyDeclaration(
+                "    @Override\n" +
+                "    public List<Query> getQueries() {\n" +
+                "        return Collections.emptyList();\n" +
+                "    }\n");
+        rulesClass.addMember(getQueriesMethod);
+
         BodyDeclaration<?> rulesList = JavaParser.parseBodyDeclaration("List<Rule> rules = new ArrayList<>();");
         rulesClass.addMember(rulesList);
         // end of fixed part

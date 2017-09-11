@@ -18,12 +18,13 @@ public class ConstraintEvaluator {
     private final Declaration[] declarations;
     private final Declaration[] requiredDeclarations;
     private final Pattern pattern;
-    private int[] argsPos;
+    private final Declaration patternDeclaration;
 
     public ConstraintEvaluator(Pattern pattern, SingleConstraint constraint) {
         this.constraint = constraint;
         this.pattern = pattern;
         this.declarations = new Declaration[] { pattern.getDeclaration() };
+        this.patternDeclaration = findPatternDeclaration();
         this.requiredDeclarations = new Declaration[0];
     }
 
@@ -31,9 +32,19 @@ public class ConstraintEvaluator {
         this.constraint = constraint;
         this.pattern = pattern;
         this.declarations = declarations;
+        this.patternDeclaration = findPatternDeclaration();
         this.requiredDeclarations = Stream.of( declarations )
                                           .filter( d -> !d.getIdentifier().equals( pattern.getDeclaration().getIdentifier() ) )
                                           .toArray( Declaration[]::new );
+    }
+
+    private Declaration findPatternDeclaration() {
+        for ( Declaration declaration : declarations ) {
+            if ( pattern.getDeclaration().getIdentifier().equals( declaration.getIdentifier() ) ) {
+                return declaration;
+            }
+        }
+        return null;
     }
 
     public boolean evaluate( InternalFactHandle handle, InternalWorkingMemory workingMemory ) {
@@ -45,11 +56,15 @@ public class ConstraintEvaluator {
     public Object[] getAlphaInvocationArgs( InternalFactHandle handle, InternalWorkingMemory workingMemory ) {
         Object[] params = new Object[declarations.length];
         for (int i = 0; i < params.length; i++) {
-            params[i] = pattern.getDeclaration().getIdentifier().equals( declarations[i].getIdentifier() ) ?
-                        handle.getObject() :
-                        declarations[1].getValue( workingMemory, null ) ;
+            params[i] = getArgument( handle, workingMemory, declarations[i], null );
         }
         return params;
+    }
+
+    private Object getArgument( InternalFactHandle handle, InternalWorkingMemory workingMemory, Declaration declaration, Tuple tuple ) {
+        return declaration == patternDeclaration ?
+                    handle.getObject() :
+                    declaration.getValue( workingMemory, tuple != null ? tuple.getObject(declaration.getPattern().getOffset()) : null );
     }
 
     public boolean evaluate(InternalFactHandle handle, Tuple tuple) {
@@ -57,30 +72,21 @@ public class ConstraintEvaluator {
     }
 
     private Object[] getBetaInvocationArgs( InternalFactHandle handle, Tuple tuple ) {
-        initArgsPos();
-        Object[] params = new Object[argsPos.length];
-        for (int i = 0; i < params.length; i++) {
-            params[i] = argsPos[i] >= 0 ? tuple.getObject(argsPos[i]) : handle.getObject();
+        Object[] params = new Object[declarations.length];
+        for (int i = 0; i < declarations.length; i++) {
+            params[i] = getArgument( handle, null, declarations[i], tuple );
         }
         return params;
     }
 
     protected InternalFactHandle[] getBetaInvocationFactHandles( InternalFactHandle handle, Tuple tuple ) {
-        initArgsPos();
-        InternalFactHandle[] fhs = new InternalFactHandle[argsPos.length];
+        InternalFactHandle[] fhs = new InternalFactHandle[declarations.length];
         for (int i = 0; i < fhs.length; i++) {
-            fhs[i] = argsPos[i] >= 0 ? tuple.get(argsPos[i]) : handle;
+            fhs[i] = declarations[i] == patternDeclaration ?
+                     handle :
+                     tuple.get(declarations[i].getPattern().getOffset());
         }
         return fhs;
-    }
-
-    private void initArgsPos() {
-        if (this.argsPos == null) {
-            this.argsPos = Stream.of( declarations )
-                                 .map( Declaration::getPattern )
-                                 .mapToInt( p -> p.getDeclaration().getIdentifier().equals( pattern.getDeclaration().getIdentifier() ) ? -1 : p.getOffset() )
-                                 .toArray();
-        }
     }
 
     public Index getIndex() {

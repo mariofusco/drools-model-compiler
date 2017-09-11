@@ -27,6 +27,7 @@ import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.base.ClassFieldAccessorCache;
 import org.drools.core.base.ClassObjectType;
 import org.drools.core.base.ClassTypeResolver;
+import org.drools.core.base.DroolsQuery;
 import org.drools.core.base.TypeResolver;
 import org.drools.core.base.extractors.ArrayElementReader;
 import org.drools.core.base.extractors.SelfReferenceClassFieldReader;
@@ -39,15 +40,18 @@ import org.drools.core.rule.EntryPointId;
 import org.drools.core.rule.GroupElement;
 import org.drools.core.rule.MultiAccumulate;
 import org.drools.core.rule.Pattern;
+import org.drools.core.rule.QueryImpl;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.rule.SingleAccumulate;
 import org.drools.core.rule.SlidingLengthWindow;
 import org.drools.core.rule.SlidingTimeWindow;
 import org.drools.core.rule.WindowDeclaration;
+import org.drools.core.rule.constraint.QueryNameConstraint;
 import org.drools.core.ruleunit.RuleUnitUtil;
 import org.drools.core.spi.Accumulator;
 import org.drools.core.spi.GlobalExtractor;
 import org.drools.core.spi.InternalReadAccessor;
+import org.drools.core.spi.ObjectType;
 import org.drools.model.AccumulateFunction;
 import org.drools.model.AccumulatePattern;
 import org.drools.model.Condition;
@@ -57,6 +61,7 @@ import org.drools.model.EntryPoint;
 import org.drools.model.Global;
 import org.drools.model.Model;
 import org.drools.model.OOPath;
+import org.drools.model.Query;
 import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
 import org.drools.model.Variable;
@@ -70,6 +75,7 @@ import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
 import org.drools.modelcompiler.constraints.LambdaAccumulator;
 import org.drools.modelcompiler.constraints.LambdaConstraint;
+import org.drools.modelcompiler.constraints.LambdaReadAccessor;
 import org.drools.modelcompiler.constraints.TemporalConstraintEvaluator;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.definition.KiePackage;
@@ -97,6 +103,10 @@ public class KiePackagesBuilder {
         for (Global global : model.getGlobals()) {
             KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( global.getPackage(), this::createKiePackage );
             pkg.addGlobal( global.getName(), global.getType().asClass() );
+        }
+        for (Query query : model.getQueries()) {
+            KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( query.getPackage(), this::createKiePackage );
+            pkg.addRule( compileQuery( pkg, query ) );
         }
         for (Rule rule : model.getRules()) {
             KnowledgePackageImpl pkg = (KnowledgePackageImpl) packages.computeIfAbsent( rule.getPackage(), this::createKiePackage );
@@ -130,6 +140,39 @@ public class KiePackagesBuilder {
         populateLHS( ctx, pkg, rule.getView() );
         processConsequence( ctx, rule.getConsequence() );
         return ruleImpl;
+    }
+
+    private QueryImpl compileQuery( KnowledgePackageImpl pkg, Query query ) {
+        QueryImpl queryImpl = new QueryImpl( query.getName() );
+        queryImpl.setPackage( query.getPackage() );
+        RuleContext ctx = new RuleContext( pkg, queryImpl );
+        addQueryPattern( query, queryImpl, ctx );
+        populateLHS( ctx, pkg, query.getView() );
+        return queryImpl;
+    }
+
+    private void addQueryPattern( Query query, QueryImpl queryImpl, RuleContext ctx ) {
+        ObjectType queryObjectType = ClassObjectType.DroolsQuery_ObjectType;
+        Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
+                                       0, // offset is 0 by default
+                                       ClassObjectType.DroolsQuery_ObjectType,
+                                       null );
+        QueryNameConstraint constraint = new QueryNameConstraint( null, query.getName() );
+        pattern.addConstraint( constraint );
+        queryImpl.getLhs().addChild(pattern);
+
+        Variable<?>[] args = query.getArguments();
+        Declaration[] declarations = new Declaration[args.length];
+        for (int i = 0; i < args.length; i++) {
+            declarations[i] = new Declaration( args[i].getName(), pattern );
+            int index = i;
+            declarations[i].setReadAccessor( new LambdaReadAccessor(index, args[index].getType().asClass(),
+                                                                    obj -> ( (DroolsQuery) obj ).getElements()[index] ) );
+            pattern.addDeclaration( declarations[i] );
+            ctx.addQueryDeclaration( args[i], declarations[i] );
+        }
+
+        queryImpl.setParameters( declarations );
     }
 
     private void processConsequence( RuleContext ctx, Consequence consequence ) {
@@ -325,7 +368,7 @@ public class KiePackagesBuilder {
         Declaration[] declarations = new Declaration[vars.length];
         for (int i = 0; i < vars.length; i++) {
             if (vars[i].isFact()) {
-                declarations[i] = ctx.getPattern( vars[i] ).getDeclaration();
+                declarations[i] = ctx.getDeclaration( vars[i] );
             } else {
                 Global global = ( (Global) vars[i] );
                 ClassObjectType objectType = getObjectType( global.getType().asClass() );

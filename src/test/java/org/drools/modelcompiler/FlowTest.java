@@ -20,15 +20,19 @@ import org.drools.core.reteoo.AlphaNode;
 import org.drools.model.Global;
 import org.drools.model.Index.ConstraintType;
 import org.drools.model.Model;
+import org.drools.model.Query1;
+import org.drools.model.Query2;
 import org.drools.model.Rule;
 import org.drools.model.Variable;
 import org.drools.model.impl.ModelImpl;
 import org.drools.modelcompiler.builder.KieBaseBuilder;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.kie.api.KieBase;
 import org.kie.api.runtime.ClassObjectFilter;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.FactHandle;
+import org.kie.api.runtime.rule.QueryResults;
 
 import static org.drools.model.DSL.*;
 import static org.drools.model.functions.accumulate.Average.avg;
@@ -367,9 +371,7 @@ public class FlowTest {
     public void testNotEmptyPredicate() {
         Rule rule = rule("R")
                 .view(not(input(declarationOf(type(Person.class)))))
-                .then(execute((drools) -> {
-            drools.insert(new Result("ok"));
-        }));
+                .then(execute((drools) -> drools.insert(new Result("ok")) ));
 
         Model model = new ModelImpl().addRule( rule );
         KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
@@ -384,5 +386,53 @@ public class FlowTest {
         ksession.fireAllRules();
 
         assertTrue( ksession.getObjects(new ClassObjectFilter( Result.class ) ).isEmpty() );
+    }
+
+    @Test
+    public void testQuery() {
+        Variable<Person> personV = declarationOf( type( Person.class ), "$p" );
+        Variable<Integer> ageV = declarationOf( type( Integer.class ) );
+
+        Query1<Integer> query = query( "olderThan", ageV )
+                .view( expr("exprA", personV, ageV, (p, a) -> p.getAge() > a) );
+
+        Model model = new ModelImpl().addQuery( query );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ReteDumper.dumpRete( ksession );
+
+        ksession.insert( new Person( "Mark", 39 ) );
+        ksession.insert( new Person( "Mario", 41 ) );
+
+        QueryResults results = ksession.getQueryResults( "olderThan", 40 );
+
+        assertEquals( 1, results.size() );
+        Person p = (Person) results.iterator().next().get( "$p" );
+        assertEquals( "Mario", p.getName() );
+    }
+
+    @Test
+    @Ignore("TODO")
+    public void testQueryInRule() {
+        Variable<Person> personV = declarationOf( type( Person.class ) );
+        Variable<Integer> ageV = declarationOf( type( Integer.class ) );
+
+        Query2<Person, Integer> query = query( "Q", personV, ageV )
+                .view( expr("exprA", personV, ageV, (p, a) -> p.getAge() > a) );
+
+        Rule rule = rule("R")
+                .view( query.call(personV, valueOf(40)) )
+                .then(on(personV)
+                              .execute((drools, p) -> drools.insert(new Result(p.getName())) ));
+
+        Model model = new ModelImpl().addQuery( query ).addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        Result result = (Result) ksession.getObjects(new ClassObjectFilter( Result.class ) ).iterator().next();
+        assertEquals( "Mario", result.getValue() );
     }
 }

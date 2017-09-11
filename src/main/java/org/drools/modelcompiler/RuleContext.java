@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
+import org.drools.core.rule.Declaration;
 import org.drools.core.rule.Pattern;
 import org.drools.model.Variable;
 
@@ -28,6 +29,8 @@ public class RuleContext {
 
     private final KnowledgePackageImpl pkg;
     private final RuleImpl rule;
+
+    private final Map<Variable, Declaration> queryDeclaration = new HashMap<>();
 
     private final Map<Variable, Pattern> patterns = new HashMap<>();
 
@@ -54,11 +57,19 @@ public class RuleContext {
         patterns.put(variable, pattern);
     }
 
-    Pattern getPattern( Variable variable ) {
-        return patterns.get( variable );
+    Declaration getDeclaration( Variable variable ) {
+        Declaration declaration = queryDeclaration.get( variable );
+        if (declaration == null) {
+            declaration = patterns.get( variable ).getDeclaration();
+        }
+        return declaration;
+    }
+
+    void addQueryDeclaration(Variable variable, Declaration declaration) {
+        queryDeclaration.put( variable, declaration );
     }
 
     public Object getBoundFact( Variable variable, Object[] objs ) {
-        return objs[ getPattern( variable ).getOffset() ];
+        return objs[ patterns.get( variable ).getOffset() ];
     }
 }

@@ -29,6 +29,7 @@ import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
 import org.drools.core.ClockType;
 import org.drools.core.reteoo.AlphaNode;
 import org.drools.modelcompiler.builder.CanonicalModelKieProject;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -48,40 +49,41 @@ import org.kie.api.runtime.ClassObjectFilter;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.conf.ClockTypeOption;
+import org.kie.api.runtime.rule.QueryResults;
 import org.kie.api.time.SessionPseudoClock;
 
 import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
 public class CompilerTest {
-    
+
     public static enum RUN_TYPE {
         USE_CANONICAL_MODEL,
         STANDARD_FROM_DRL;
     }
-    
+
     @Parameters(name = "{0}")
     public static Object[] params() {
         return new Object[]{
-                            RUN_TYPE.STANDARD_FROM_DRL,
-                            RUN_TYPE.USE_CANONICAL_MODEL
+                RUN_TYPE.STANDARD_FROM_DRL,
+                RUN_TYPE.USE_CANONICAL_MODEL
         };
     }
 
     private final RUN_TYPE testRunType;
-    
-    public CompilerTest(RUN_TYPE testRunType) {
+
+    public CompilerTest( RUN_TYPE testRunType ) {
         this.testRunType = testRunType;
     }
 
     public static class Result {
         private Object value;
-        
+
         public Result() {
             // empty constructor.
         }
-        
-        public Result(Object value) {
+
+        public Result( Object value ) {
             this.value = value;
         }
 
@@ -110,16 +112,16 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str );
 
         Result result = new Result();
-        ksession.insert(result);
+        ksession.insert( result );
 
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Edson", 35));
-        ksession.insert(new Person("Mario", 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Edson", 35 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
         ksession.fireAllRules();
 
         assertEquals( "Mario is older than Mark", result.getValue() );
     }
-    
+
     @Test
     public void testShareAlpha() {
         String str =
@@ -138,23 +140,23 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str );
 
         Set result = new HashSet<>();
-        ksession.insert(result);
+        ksession.insert( result );
 
-        Person mark = new Person("Mark", 37);
-        Person edson = new Person("Edson", 35);
-        Person mario = new Person("Mario", 40);
+        Person mark = new Person( "Mark", 37 );
+        Person edson = new Person( "Edson", 35 );
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mark);
-        ksession.insert(edson);
-        ksession.insert(mario);
+        ksession.insert( mark );
+        ksession.insert( edson );
+        ksession.insert( mario );
         ksession.fireAllRules();
 
-        assertTrue(result.contains(mark));
-        assertTrue(result.contains(mario));
-        
+        assertTrue( result.contains( mark ) );
+        assertTrue( result.contains( mario ) );
+
         // Alpha node "name != Edson" should be shared between 3rd and 4th pattern.
         // therefore alpha nodes should be a total of 2: name == Edson, name != Edson
-        assertEquals(2, ReteDumper.dumpRete(ksession).stream().filter(AlphaNode.class::isInstance).count());
+        assertEquals( 2, ReteDumper.dumpRete( ksession ).stream().filter( AlphaNode.class::isInstance ).count() );
     }
 
     @Test
@@ -172,9 +174,9 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str );
 
         ksession.insert( "Mario" );
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Edson", 35));
-        ksession.insert(new Person("Mario", 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Edson", 35 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
         ksession.fireAllRules();
     }
 
@@ -195,59 +197,59 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str );
 
         ksession.insert( "Mario" );
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Edson", 35));
-        ksession.insert(new Person("Mario", 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Edson", 35 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
         ksession.fireAllRules();
     }
 
-    private KieSession getKieSession(String str) {
-        return getKieSession(str, null);
+    private KieSession getKieSession( String str ) {
+        return getKieSession( str, null );
     }
 
-    private KieSession getKieSession(String str, KieModuleModel model) {
+    private KieSession getKieSession( String str, KieModuleModel model ) {
         KieServices ks = KieServices.Factory.get();
-        
+
         ReleaseId releaseId = ks.newReleaseId( "org.kie", "kjar-test-" + UUID.randomUUID(), "1.0" );
-        
+
         KieRepository repo = ks.getRepository();
         repo.removeKieModule( releaseId );
-        
+
         KieFileSystem kfs = ks.newKieFileSystem();
-        if (model != null) {
+        if ( model != null ) {
             kfs.writeKModuleXML( model.toXML() );
         }
-        kfs.writePomXML(KJARUtils.getPom(releaseId));
+        kfs.writePomXML( KJARUtils.getPom( releaseId ) );
         kfs.write( "src/main/resources/r1.drl", str );
 // This is actually taken from classloader of test (?) - or anyway it must, because the test are instantiating directly Person.
 //        String javaSrc = Person.class.getCanonicalName().replace( '.', File.separatorChar ) + ".java";
 //        Resource javaResource = ks.getResources().newFileSystemResource( "src/test/java/" + javaSrc );
 //        kfs.write( "src/main/java/" + javaSrc, javaResource );
 
-        KieBuilder kieBuilder = (testRunType == RUN_TYPE.USE_CANONICAL_MODEL) ?
+        KieBuilder kieBuilder = ( testRunType == RUN_TYPE.USE_CANONICAL_MODEL ) ?
                                 ( (KieBuilderImpl) ks.newKieBuilder( kfs ) ).buildAll( CanonicalModelKieProject::new ) :
                                 ks.newKieBuilder( kfs ).buildAll();
         List<Message> messages = kieBuilder.getResults().getMessages();
-        if (!messages.isEmpty()) {
-            fail(messages.toString());
+        if ( !messages.isEmpty() ) {
+            fail( messages.toString() );
         }
-        
-        if (testRunType == RUN_TYPE.STANDARD_FROM_DRL) { 
-            return ks.newKieContainer(releaseId).newKieSession();
+
+        if ( testRunType == RUN_TYPE.STANDARD_FROM_DRL ) {
+            return ks.newKieContainer( releaseId ).newKieSession();
         } else {
             InternalKieModule kieModule = (InternalKieModule) kieBuilder.getKieModule();
             File kjarFile = TestFileUtils.bytesToTempKJARFile( releaseId, kieModule.getBytes(), ".jar" );
             KieModule zipKieModule = new CanonicalKieModule( releaseId, model != null ? model : getDefaultKieModuleModel( ks ), kjarFile );
             repo.addKieModule( zipKieModule );
-            
+
             KieContainer kieContainer = ks.newKieContainer( releaseId );
             KieSession kieSession = kieContainer.newKieSession();
-            
+
             return kieSession;
         }
     }
 
-    private KieModuleModel getDefaultKieModuleModel(KieServices ks) {
+    private KieModuleModel getDefaultKieModuleModel( KieServices ks ) {
         KieModuleModel kproj = ks.newKieModuleModel();
         KieBaseModel kieBaseModel1 = kproj.newKieBaseModel( "kbase" ).setDefault( true );
         KieSessionModel ksession1 = kieBaseModel1.newKieSessionModel( "ksession" ).setDefault( true );
@@ -270,11 +272,11 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str );
 
         Result result = new Result();
-        ksession.insert(result);
+        ksession.insert( result );
 
         ksession.insert( "Mark" );
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Mario", 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
         ksession.fireAllRules();
 
         assertEquals( "Found: Mark", result.getValue() );
@@ -295,20 +297,20 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str );
 
         Result result = new Result();
-        ksession.insert(result);
+        ksession.insert( result );
 
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Mario", 40));
-        ksession.insert(new Person(null, 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
+        ksession.insert( new Person( null, 40 ) );
         ksession.fireAllRules();
 
         assertEquals( "Found: Mark", result.getValue() );
     }
-   
+
     public static <T> Collection<T> getObjects( KieSession ksession, Class<T> clazz ) {
-        return (Collection<T>) ksession.getObjects(new ClassObjectFilter( clazz ));
+        return (Collection<T>) ksession.getObjects( new ClassObjectFilter( clazz ) );
     }
-    
+
     @Test
     public void testSimpleInsert() {
         String str =
@@ -323,15 +325,15 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Mario", 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("Mark", results.iterator().next().getValue());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mark", results.iterator().next().getValue() );
     }
-    
+
     @Test
     public void testSimpleDelete() {
         String str =
@@ -347,16 +349,16 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Mario", 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("Mark", results.iterator().next().getValue());
-        assertEquals(1, getObjects(ksession, Person.class).size());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mark", results.iterator().next().getValue() );
+        assertEquals( 1, getObjects( ksession, Person.class ).size() );
     }
-    
+
     @Test
     public void testSimpleInsertDeleteExplicitScope() {
         String str =
@@ -372,14 +374,14 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        ksession.insert(new Person("Mark", 37));
-        ksession.insert(new Person("Mario", 40));
+        ksession.insert( new Person( "Mark", 37 ) );
+        ksession.insert( new Person( "Mario", 40 ) );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("Mark", results.iterator().next().getValue());
-        assertEquals(1, getObjects(ksession, Person.class).size());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mark", results.iterator().next().getValue() );
+        assertEquals( 1, getObjects( ksession, Person.class ).size() );
     }
 
     @Test
@@ -395,11 +397,11 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        Person mark = new Person("Mark", 37);
-        Person mario = new Person("Mario", 40);
+        Person mark = new Person( "Mark", 37 );
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mark);
-        ksession.insert(mario);
+        ksession.insert( mark );
+        ksession.insert( mario );
         ksession.fireAllRules();
 
         assertEquals( 38, mark.getAge() );
@@ -418,11 +420,11 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        Person mark = new Person("Mark", 37);
-        Person mario = new Person("Mario", 40);
+        Person mark = new Person( "Mark", 37 );
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mark);
-        ksession.insert(mario);
+        ksession.insert( mark );
+        ksession.insert( mario );
         ksession.fireAllRules();
 
         assertEquals( 38, mark.getAge() );
@@ -450,16 +452,16 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str, kproj );
         SessionPseudoClock clock = ksession.getSessionClock();
 
-        ksession.insert( new StockTick("DROO") );
+        ksession.insert( new StockTick( "DROO" ) );
         clock.advanceTime( 6, TimeUnit.SECONDS );
-        ksession.insert( new StockTick("ACME") );
+        ksession.insert( new StockTick( "ACME" ) );
 
-        assertEquals(1, ksession.fireAllRules());
+        assertEquals( 1, ksession.fireAllRules() );
 
         clock.advanceTime( 4, TimeUnit.SECONDS );
-        ksession.insert( new StockTick("ACME") );
+        ksession.insert( new StockTick( "ACME" ) );
 
-        assertEquals(0, ksession.fireAllRules());
+        assertEquals( 0, ksession.fireAllRules() );
     }
 
     @Test
@@ -483,19 +485,19 @@ public class CompilerTest {
         KieSession ksession = getKieSession( str, kproj );
         SessionPseudoClock clock = ksession.getSessionClock();
 
-        ksession.getEntryPoint( "ep1" ).insert( new StockTick("DROO") );
+        ksession.getEntryPoint( "ep1" ).insert( new StockTick( "DROO" ) );
 
         clock.advanceTime( 6, TimeUnit.SECONDS );
-        ksession.getEntryPoint( "ep1" ).insert( new StockTick("ACME") );
-        assertEquals(0, ksession.fireAllRules());
+        ksession.getEntryPoint( "ep1" ).insert( new StockTick( "ACME" ) );
+        assertEquals( 0, ksession.fireAllRules() );
 
         clock.advanceTime( 1, TimeUnit.SECONDS );
-        ksession.getEntryPoint( "ep2" ).insert( new StockTick("ACME") );
-        assertEquals(1, ksession.fireAllRules());
+        ksession.getEntryPoint( "ep2" ).insert( new StockTick( "ACME" ) );
+        assertEquals( 1, ksession.fireAllRules() );
 
         clock.advanceTime( 4, TimeUnit.SECONDS );
-        ksession.getEntryPoint( "ep2" ).insert( new StockTick("ACME") );
-        assertEquals(0, ksession.fireAllRules());
+        ksession.getEntryPoint( "ep2" ).insert( new StockTick( "ACME" ) );
+        assertEquals( 0, ksession.fireAllRules() );
     }
 
     @Test
@@ -519,15 +521,15 @@ public class CompilerTest {
         SessionPseudoClock clock = ksession.getSessionClock();
 
         clock.advanceTime( 1, TimeUnit.SECONDS );
-        ksession.insert( new StockTick("DROO") );
+        ksession.insert( new StockTick( "DROO" ) );
         clock.advanceTime( 1, TimeUnit.SECONDS );
-        ksession.insert( new StockTick("DROO") );
+        ksession.insert( new StockTick( "DROO" ) );
         clock.advanceTime( 1, TimeUnit.SECONDS );
-        ksession.insert( new StockTick("ACME") );
+        ksession.insert( new StockTick( "ACME" ) );
         clock.advanceTime( 1, TimeUnit.SECONDS );
-        ksession.insert( new StockTick("DROO") );
+        ksession.insert( new StockTick( "DROO" ) );
 
-        assertEquals(2, ksession.fireAllRules());
+        assertEquals( 2, ksession.fireAllRules() );
     }
 
     @Test
@@ -543,14 +545,14 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        Person mario = new Person("Mario", 40);
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mario);
+        ksession.insert( mario );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("ok", results.iterator().next().getValue());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "ok", results.iterator().next().getValue() );
     }
 
     @Test
@@ -568,13 +570,13 @@ public class CompilerTest {
 
         ReteDumper.dumpRete( ksession );
 
-        Person mario = new Person("Mario", 40);
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mario);
+        ksession.insert( mario );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(0, results.size());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 0, results.size() );
     }
 
     @Test
@@ -590,16 +592,16 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        Person mario = new Person("Mario", 40);
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mario);
+        ksession.insert( mario );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("ok", results.iterator().next().getValue());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "ok", results.iterator().next().getValue() );
     }
-    
+
     @Test
     public void testExistsEmptyPredicate() {
         String str =
@@ -613,18 +615,18 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        Person mark = new Person("Mark", 37);
-        Person mario = new Person("Mario", 40);
-        
-        ksession.insert(mark);
-        ksession.insert(mario);
+        Person mark = new Person( "Mark", 37 );
+        Person mario = new Person( "Mario", 40 );
+
+        ksession.insert( mark );
+        ksession.insert( mario );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("ok", results.iterator().next().getValue());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "ok", results.iterator().next().getValue() );
     }
-    
+
     @Test
     public void testEmptyPattern() {
         String str =
@@ -638,16 +640,16 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        Person mario = new Person("Mario", 40);
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mario);
+        ksession.insert( mario );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("ok", results.iterator().next().getValue());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "ok", results.iterator().next().getValue() );
     }
-    
+
     @Test
     public void testEmptyPatternWithBinding() {
         String str =
@@ -661,13 +663,63 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        Person mario = new Person("Mario", 40);
+        Person mario = new Person( "Mario", 40 );
 
-        ksession.insert(mario);
+        ksession.insert( mario );
         ksession.fireAllRules();
 
-        Collection<Result> results = getObjects(ksession, Result.class);
-        assertEquals(1, results.size());
-        assertEquals("Mario", results.iterator().next().getValue());
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mario", results.iterator().next().getValue() );
+    }
+
+    @Test
+    @Ignore("DSL generation to be implemented")
+    public void testQuery() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "query olderThan( int $age )\n" +
+                "    $p : Person(age > $age)\n" +
+                "end ";
+
+        KieSession ksession = getKieSession( str );
+
+        ReteDumper.dumpRete( ksession );
+
+        ksession.insert( new Person( "Mark", 39 ) );
+        ksession.insert( new Person( "Mario", 41 ) );
+
+        QueryResults results = ksession.getQueryResults( "olderThan", 40 );
+
+        assertEquals( 1, results.size() );
+        Person p = (Person) results.iterator().next().get( "$p" );
+        assertEquals( "Mario", p.getName() );
+    }
+
+    @Test
+    @Ignore("DSL generation to be implemented")
+    public void testQueryInRule() {
+        String str =
+                "import " + Result.class.getCanonicalName() + ";" +
+                "import " + Person.class.getCanonicalName() + ";" +
+                "query olderThan( Person $p, int $age )\n" +
+                "    $p := Person(age > $age)\n" +
+                "end\n" +
+                "rule R when\n" +
+                "    olderThan( $p, 40; )\n" +
+                "then\n" +
+                "    insert(new Result($p.getName()));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        ksession.insert( new Person( "Mark", 39 ) );
+        ksession.insert( new Person( "Mario", 41 ) );
+
+        ksession.fireAllRules();
+
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mario", results.iterator().next().getValue() );
     }
 }
