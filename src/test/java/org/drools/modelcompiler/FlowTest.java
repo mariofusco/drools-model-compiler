@@ -255,7 +255,7 @@ public class FlowTest {
         Rule rule = rule("accumulate")
                 .view(
                         accumulate(expr(person, p -> p.getName().startsWith("M")),
-                                   sum(Person::getAge).as(resultSum))
+                                   sum((Person p) -> p.getAge()).as(resultSum))
                      )
                 .then( on(resultSum).execute(sum -> result.value = "total = " + sum) );
 

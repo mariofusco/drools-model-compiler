@@ -331,6 +331,22 @@ public class ModelGenerator {
 
         context.pushExprPointer(functionDSL::addArgument);
 
+        final Expression expr = DrlxParser.parseExpression(function.getParams()[0]);
+
+
+        if(expr instanceof MethodCallExpr) {
+            final MethodCallExpr methodCallExpr = (MethodCallExpr) expr;
+
+            final NameExpr scope = (NameExpr) methodCallExpr.getScope().orElseThrow(UnsupportedOperationException::new);
+            final Class clazz =  context.declarations.get(scope.getName().asString()).declarationClass;
+
+            TypedExpression left = DrlxParseUtil.toTypedExpression( context, clazz,  expr, context.declarations.keySet(), new HashSet<>() );
+
+            System.out.println("left = " + left);
+
+        }
+
+
         context.popExprPointer();
 
         context.popExprPointer();
