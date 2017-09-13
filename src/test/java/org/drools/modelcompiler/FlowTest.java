@@ -58,6 +58,11 @@ public class FlowTest {
         public void setValue( Object value ) {
             this.value = value;
         }
+
+        @Override
+        public String toString() {
+            return value.toString();
+        }
     }
 
     @Test
@@ -432,6 +437,38 @@ public class FlowTest {
 
         ksession.insert( new Person( "Mark", 39 ) );
         ksession.insert( new Person( "Mario", 41 ) );
+
+        ksession.fireAllRules();
+
+        Collection<Result> results = (Collection<Result>) ksession.getObjects( new ClassObjectFilter( Result.class ) );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mario", results.iterator().next().getValue() );
+    }
+
+    @Test
+    public void testQueryInRuleWithDeclaration() {
+        Variable<Person> personV = declarationOf( type( Person.class ) );
+        Variable<Integer> ageV = declarationOf( type( Integer.class ) );
+
+        Query2<Person, Integer> query = query( "olderThan", personV, ageV )
+                .view( expr("exprA", personV, ageV, (p, a) -> p.getAge() > a) );
+
+        Rule rule = rule("R")
+                .view(
+                        expr( "exprB", personV, p -> p.getName().startsWith( "M" ) ),
+                        query.call(personV, valueOf(40))
+                     )
+                .then(on(personV)
+                              .execute((drools, p) -> drools.insert(new Result(p.getName())) ));
+
+        Model model = new ModelImpl().addQuery( query ).addRule( rule );
+        KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );
+
+        KieSession ksession = kieBase.newKieSession();
+
+        ksession.insert( new Person( "Mark", 39 ) );
+        ksession.insert( new Person( "Mario", 41 ) );
+        ksession.insert( new Person( "Edson", 41 ) );
 
         ksession.fireAllRules();
 

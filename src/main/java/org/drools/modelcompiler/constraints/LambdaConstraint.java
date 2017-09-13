@@ -1,5 +1,8 @@
 package org.drools.modelcompiler.constraints;
 
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.util.List;
 
 import org.drools.core.common.InternalFactHandle;
@@ -10,7 +13,6 @@ import org.drools.core.rule.Declaration;
 import org.drools.core.rule.IndexableConstraint;
 import org.drools.core.rule.IntervalProviderConstraint;
 import org.drools.core.rule.MutableTypeConstraint;
-import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.FieldValue;
 import org.drools.core.spi.InternalReadAccessor;
 import org.drools.core.spi.Tuple;
@@ -162,20 +164,67 @@ public class LambdaConstraint extends MutableTypeConstraint implements Indexable
         return readAccessor;
     }
 
-    public static class LambdaContextEntry extends MvelConstraint.MvelContextEntry {
-        Tuple getTuple() {
+    public static class LambdaContextEntry implements ContextEntry {
+
+        private Tuple tuple;
+        private InternalFactHandle handle;
+
+        private transient InternalWorkingMemory workingMemory;
+
+        public void updateFromTuple(InternalWorkingMemory workingMemory, Tuple tuple) {
+            this.tuple = tuple;
+            this.workingMemory = workingMemory;
+        }
+
+        public void updateFromFactHandle(InternalWorkingMemory workingMemory, InternalFactHandle handle) {
+            this.workingMemory = workingMemory;
+            this.handle = handle;
+        }
+
+        public void resetTuple() {
+            tuple = null;
+        }
+
+        public void resetFactHandle() {
+            workingMemory = null;
+            handle = null;
+        }
+
+        public void writeExternal(ObjectOutput out ) throws IOException {
+            out.writeObject(tuple);
+            out.writeObject( handle );
+        }
+
+        public void readExternal(ObjectInput in ) throws IOException, ClassNotFoundException {
+            tuple = (Tuple)in.readObject();
+            handle = (InternalFactHandle) in.readObject();
+        }
+
+        public Tuple getTuple() {
             return tuple;
         }
-        InternalFactHandle getHandle() {
-            return rightHandle;
+
+        public InternalFactHandle getHandle() {
+            return handle;
+        }
+
+        public InternalWorkingMemory getWorkingMemory() {
+            return workingMemory;
+        }
+
+        public ContextEntry getNext() {
+            throw new UnsupportedOperationException();
+        }
+
+        public void setNext(final ContextEntry entry) {
+            throw new UnsupportedOperationException();
         }
     }
 
     @Override
     public boolean equals(Object other) {
-        if (this == other) return true;
-        if (other == null || getClass() != other.getClass()) return false;
-        return evaluator.equals(((LambdaConstraint) other).evaluator);
+        if ( this == other ) return true;
+        return other != null && getClass() == other.getClass() && evaluator.equals( ( (LambdaConstraint) other ).evaluator );
     }
 
     @Override

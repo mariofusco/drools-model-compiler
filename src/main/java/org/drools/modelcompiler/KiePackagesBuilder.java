@@ -83,6 +83,7 @@ import org.drools.modelcompiler.constraints.LambdaAccumulator;
 import org.drools.modelcompiler.constraints.LambdaConstraint;
 import org.drools.modelcompiler.constraints.LambdaReadAccessor;
 import org.drools.modelcompiler.constraints.TemporalConstraintEvaluator;
+import org.drools.modelcompiler.constraints.UnificationConstraint;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.definition.KiePackage;
 import org.kie.api.definition.type.Role;
@@ -272,16 +273,24 @@ public class KiePackagesBuilder {
         InternalReadAccessor arrayReader = new SelfReferenceClassFieldReader( Object[].class );
         QueryArgument[] arguments = new QueryArgument[queryPattern.getArguments().length];
         List<Integer> varIndexList = new ArrayList<>();
+        List<Declaration> requiredDeclarations = new ArrayList<>();
 
         for (int i = 0; i < queryPattern.getArguments().length; i++) {
             Argument arg = queryPattern.getArguments()[i];
             if (arg instanceof Variable ) {
-                ArrayElementReader reader = new ArrayElementReader( arrayReader,
-                                                                    i,
-                                                                    arg.getType().asClass() );
-                pattern.addDeclaration( ( (Variable) arg ).getName() ).setReadAccessor( reader );
-                arguments[i] = QueryArgument.VAR;
-                varIndexList.add(i);
+                Variable var = ( (Variable) arg );
+                Declaration decl = ctx.getDeclaration( var );
+                if (decl != null) {
+                    requiredDeclarations.add( decl );
+                    arguments[i] = new QueryArgument.Declr(decl);
+                } else {
+                    ArrayElementReader reader = new ArrayElementReader( arrayReader,
+                                                                        i,
+                                                                        arg.getType().asClass() );
+                    pattern.addDeclaration( var.getName() ).setReadAccessor( reader );
+                    arguments[i] = QueryArgument.VAR;
+                    varIndexList.add( i );
+                }
             } else if (arg instanceof Value ) {
                 arguments[i] = new QueryArgument.Literal( ( (Value) arg ).getValue() );
             } else {
@@ -292,7 +301,7 @@ public class KiePackagesBuilder {
                                  queryPattern.getQuery().getName(),
                                  arguments,
                                  varIndexList.stream().mapToInt(i->i).toArray(),
-                                 new Declaration[0], // TODO: requiredDeclarations.toArray( new Declaration[requiredDeclarations.size()] ),
+                                 requiredDeclarations.toArray( new Declaration[requiredDeclarations.size()] ),
                                  true, // TODO: openQuery
                                  false ); // TODO: query.isAbductive() );
     }
@@ -300,6 +309,12 @@ public class KiePackagesBuilder {
     private Pattern buildPattern( RuleContext ctx, Condition condition ) {
         org.drools.model.Pattern modelPattern = (org.drools.model.Pattern) condition;
         Pattern pattern = addPatternForVariable( ctx, modelPattern.getPatternVariable() );
+
+        Declaration queryArgDecl = ctx.getQueryDeclaration( modelPattern.getPatternVariable() );
+        if (queryArgDecl != null) {
+            pattern.addConstraint( new UnificationConstraint( queryArgDecl ) );
+        }
+
         addConstraintsToPattern( ctx, pattern, modelPattern, modelPattern.getConstraint() );
         return pattern;
     }

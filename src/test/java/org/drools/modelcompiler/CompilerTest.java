@@ -720,4 +720,33 @@ public class CompilerTest {
         assertEquals( 1, results.size() );
         assertEquals( "Mario", results.iterator().next().getValue() );
     }
+
+    @Test
+    @Ignore("DSL generation to be implemented")
+    public void testQueryInRuleWithDeclaration() {
+        String str =
+                "import " + Result.class.getCanonicalName() + ";" +
+                "import " + Person.class.getCanonicalName() + ";" +
+                "query olderThan( Person $p, int $age )\n" +
+                "    $p := Person(age > $age)\n" +
+                "end\n" +
+                "rule R when\n" +
+                "    $p : Person( name.startsWith(\"M\") )\n" +
+                "    olderThan( $p, 40; )\n" +
+                "then\n" +
+                "    insert(new Result($p.getName()));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        ksession.insert( new Person( "Mark", 39 ) );
+        ksession.insert( new Person( "Mario", 41 ) );
+        ksession.insert( new Person( "Edson", 41 ) );
+
+        ksession.fireAllRules();
+
+        Collection<Result> results = getObjects( ksession, Result.class );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mario", results.iterator().next().getValue() );
+    }
 }

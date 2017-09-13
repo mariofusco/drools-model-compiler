@@ -60,9 +60,14 @@ public class RuleContext {
     Declaration getDeclaration( Variable variable ) {
         Declaration declaration = queryDeclaration.get( variable );
         if (declaration == null) {
-            declaration = patterns.get( variable ).getDeclaration();
+            Pattern pattern = patterns.get( variable );
+            declaration = pattern != null ? pattern.getDeclaration() : null;
         }
         return declaration;
+    }
+
+    Declaration getQueryDeclaration( Variable variable ) {
+        return queryDeclaration.get( variable );
     }
 
     void addQueryDeclaration(Variable variable, Declaration declaration) {
