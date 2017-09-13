@@ -61,6 +61,7 @@ import org.drools.javaparser.ast.stmt.BlockStmt;
 import org.drools.javaparser.ast.stmt.ExpressionStmt;
 import org.drools.javaparser.ast.stmt.ReturnStmt;
 import org.drools.javaparser.ast.type.ClassOrInterfaceType;
+import org.drools.javaparser.ast.type.Type;
 import org.drools.javaparser.ast.type.TypeParameter;
 import org.drools.javaparser.ast.type.UnknownType;
 import org.drools.model.BitMask;
@@ -102,16 +103,19 @@ public class ModelGenerator {
         packageModel.addImports(pkg.getTypeResolver().getImports());
         for ( RuleDescrImpl descr : rules ) {
             RuleDescr ruleDescr = descr.getDescr();
-            RuleContext context = new RuleContext( pkg, packageModel.getExprIdGenerator() );
-//            visit(context, descr.getImpl().getLhs());
-            visit(context, ruleDescr.getLhs());
 
             MethodDeclaration ruleMethod = new MethodDeclaration();
             ruleMethod.setModifiers(EnumSet.of(Modifier.PRIVATE));
             ruleMethod.setType( RULE_TYPE );
             ruleMethod.setName( "rule_" + toId( ruleDescr.getName() ) );
+
             BlockStmt ruleBlock = new BlockStmt();
             ruleMethod.setBody(ruleBlock);
+
+            RuleContext context = new RuleContext( pkg, packageModel.getExprIdGenerator(), ruleBlock);
+
+//            visit(context, descr.getImpl().getLhs());
+            visit(context, ruleDescr.getLhs());
 
             for ( Entry<String, DeclarationSpec> decl : context.declarations.entrySet() ) {
                 ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
@@ -345,10 +349,30 @@ public class ModelGenerator {
             lambdaExpr.setBody(new ExpressionStmt(methodCallExpr));
 
             functionDSL.addArgument(lambdaExpr);
+
+            ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
+            Type declType;
+            try {
+                declType = JavaParser.parseType(clazz.getMethod(methodCallExpr.getName().asString()).getReturnType().getCanonicalName());
+            } catch ( NoSuchMethodException e ) {
+                throw new UnsupportedOperationException("Aggregate function result type", e);
+            }
+            varType.setTypeArguments(declType);
+            VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "$sum", Modifier.FINAL);
+
+            MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
+            MethodCallExpr typeCall = new MethodCallExpr(null, "type");
+            declarationOfCall.addArgument(typeCall);
+
+            AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
+            context.getRuleBlock().addStatement(var_assign);
+
         }
 
         final MethodCallExpr asDSL = new MethodCallExpr(functionDSL, "as");
         asDSL.addArgument(new NameExpr(function.getBind()));
+
+
 
         accumulateDSL.addArgument(asDSL);
 
@@ -660,15 +684,17 @@ public class ModelGenerator {
     public static class RuleContext {
         private final InternalKnowledgePackage pkg;
         private DRLExprIdGenerator exprIdGenerator;
+        private BlockStmt ruleBlock;
 
         Map<String, DeclarationSpec> declarations = new HashMap<>();
         Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
         List<Expression> expressions = new ArrayList<>();
 
-        public RuleContext( InternalKnowledgePackage pkg, DRLExprIdGenerator exprIdGenerator ) {
+        public RuleContext(InternalKnowledgePackage pkg, DRLExprIdGenerator exprIdGenerator, BlockStmt ruleBlock) {
             this.pkg = pkg;
             this.exprIdGenerator = exprIdGenerator;
             exprPointer.push( this.expressions::add );
+            this.ruleBlock = ruleBlock;
         }
 
         public void addExpression(Expression e) {
@@ -691,6 +717,11 @@ public class ModelGenerator {
         public String getExprId(Class<?> patternType, String drlConstraint) {
             return exprIdGenerator.getExprId(patternType, drlConstraint);
         }
+
+        public BlockStmt getRuleBlock() {
+            return ruleBlock;
+        }
+
     }
 
     public static class DeclarationSpec {
