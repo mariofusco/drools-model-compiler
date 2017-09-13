@@ -589,7 +589,11 @@ public class ModelGenerator {
         if (!isStatic) {
             LambdaExpr lambdaExpr = new LambdaExpr();
             lambdaExpr.setEnclosingParameters( true );
-            lambdaExpr.addParameter( new Parameter( new UnknownType(), "_this" ) );
+            if(bindingId != null && !"".equals(bindingId)) {
+                lambdaExpr.addParameter( new Parameter( new TypeParameter(patternType.getName()), bindingId ) );
+            } else {
+                lambdaExpr.addParameter( new Parameter( new UnknownType(), "_this" ) );
+            }
             usedDeclarations.stream().map( s -> new Parameter( new UnknownType(), s ) ).forEach( lambdaExpr::addParameter );
             lambdaExpr.setBody( new ExpressionStmt( expr ) );
             exprArg = lambdaExpr;

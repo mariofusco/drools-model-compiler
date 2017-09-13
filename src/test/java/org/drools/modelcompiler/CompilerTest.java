@@ -756,7 +756,7 @@ public class CompilerTest {
                 "import " + Person.class.getCanonicalName() + ";" +
                 "import " + Result.class.getCanonicalName() + ";" +
                 "rule X when\n" +
-                 "  accumulate ( $p: Person ( name.startsWith(\"M\")); \n" +
+                 "  accumulate ( $p: Person ( $p.getName().startsWith(\"M\")); \n" +
                 "                $sum : sum($p.getAge())  \n" +
                 "              )                          \n" +
                 "then\n" +
