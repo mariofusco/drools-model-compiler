@@ -38,7 +38,6 @@ import org.kie.api.runtime.rule.QueryResults;
 
 import static org.drools.model.DSL.*;
 import static org.drools.model.functions.accumulate.Average.avg;
-import static org.drools.model.functions.accumulate.Sum.sum;
 import static org.junit.Assert.*;
 
 public class FlowTest {

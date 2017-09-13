@@ -16,11 +16,9 @@
 
 package org.drools.modelcompiler.builder.generator;
 
-import java.lang.reflect.Method;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-
+import org.drools.core.util.ClassUtils;
+import org.drools.core.util.index.IndexUtil;
+import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.drools.javaparser.JavaParser;
 import org.drools.javaparser.ast.Node;
 import org.drools.javaparser.ast.drlx.expr.InlineCastExpr;
@@ -38,10 +36,12 @@ import org.drools.javaparser.ast.expr.NameExpr;
 import org.drools.javaparser.ast.expr.NullLiteralExpr;
 import org.drools.javaparser.ast.expr.ThisExpr;
 import org.drools.javaparser.ast.type.ReferenceType;
-import org.drools.core.util.ClassUtils;
-import org.drools.core.util.index.IndexUtil;
-import org.drools.core.util.index.IndexUtil.ConstraintType;
 import org.drools.modelcompiler.builder.generator.ModelGenerator.RuleContext;
+
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 public class DrlxParseUtil {
 
@@ -72,7 +72,8 @@ public class DrlxParseUtil {
             return new TypedExpression( drlxExpr , Optional.empty());
         } else if ( drlxExpr instanceof ThisExpr ) {
             return new TypedExpression( new NameExpr( "_this") , Optional.empty());
-        } else if ( drlxExpr instanceof NameExpr ) {
+        }
+        else if ( drlxExpr instanceof NameExpr ) {
             String name = drlxExpr.toString();
             if (context.declarations.containsKey(name)) {
                 // then drlxExpr is a single NameExpr referring to a binding, e.g.: "$p1".
@@ -82,10 +83,10 @@ public class DrlxParseUtil {
                 reactOnProperties.add(name);
                 Method accessor = ClassUtils.getAccessor( typeCursor, name );
                 Class<?> accessorReturnType = accessor.getReturnType();
-    
+
                 NameExpr _this = new NameExpr("_this");
                 MethodCallExpr body = new MethodCallExpr( _this, accessor.getName() );
-                
+
                 return new TypedExpression( body, Optional.of( accessorReturnType ));
             }
         } else if ( drlxExpr instanceof FieldAccessExpr ) {
@@ -112,7 +113,7 @@ public class DrlxParseUtil {
                     // because reactOnProperties is referring only to the properties of the type of the pattern, not other declarations properites.
                     usedDeclarations.add( firstName );
                     if (!isInLineCast) {
-                        typeCursor = context.declarations.get( firstName ).declarationClass;
+                        typeCursor = context.declarations.get( firstName ).get().declarationClass;
                     }
                     previous = new NameExpr( firstName );
                 } else {
@@ -201,5 +202,35 @@ public class DrlxParseUtil {
             }
             return new TypedExpression( implicitThis ? "_this" + telescoping.toString() : telescoping.toString(), Optional.of( typeCursor ));
         }
+    }
+
+    public static MethodCallExpr preprendNameExprToMethodCallExpr(NameExpr nameExpr, MethodCallExpr methodCallExpr) {
+
+        final Optional<Expression> rootNode = findRootNote(methodCallExpr);
+
+        rootNode.map(f -> {
+            if(f instanceof MethodCallExpr) {
+                ((MethodCallExpr)f).setScope(nameExpr);
+            }
+            return f;
+        });
+
+        return methodCallExpr;
+    }
+
+    private static Optional<Expression> findRootNote(Expression methodCallExpr) {
+
+        if(methodCallExpr instanceof MethodCallExpr) {
+            final MethodCallExpr methodCall = (MethodCallExpr)methodCallExpr;
+
+            if(methodCall.getScope().isPresent()) {
+                return findRootNote(((MethodCallExpr) methodCallExpr).getScope().get());
+            } else {
+                return Optional.of(methodCall);
+            }
+        }
+
+        return Optional.empty();
+
     }
 }

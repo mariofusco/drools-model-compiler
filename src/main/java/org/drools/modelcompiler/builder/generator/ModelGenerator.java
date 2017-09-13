@@ -118,7 +118,14 @@ public class ModelGenerator {
 //            visit(context, descr.getImpl().getLhs());
             visit(context, ruleDescr.getLhs());
 
-            for ( Entry<String, DeclarationSpec> decl : context.declarations.entrySet() ) {
+            Set<Entry<String, DeclarationSpec>> declarations =
+                    context.declarations.entrySet()
+                            .stream()
+                            .filter(d -> d.getValue().isPresent())
+                            .collect(Collectors.toMap(Entry::getKey, e -> e.getValue().get()))
+                            .entrySet();
+
+            for ( Entry<String, DeclarationSpec> decl : declarations ) {
                 ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
                 ClassOrInterfaceType declType = JavaParser.parseClassOrInterfaceType( decl.getValue().declarationClass.getCanonicalName() );
 
@@ -253,7 +260,7 @@ public class ModelGenerator {
                     mce.setScope(new NameExpr("drools"));
                 }
                 if (mce.getNameAsString().equals("update")) {
-                    updateExprs.add( mce );
+                    updateExprs.add(mce);
                 }
            })
            .count() > 0;
@@ -262,7 +269,7 @@ public class ModelGenerator {
             Expression argExpr = updateExpr.getArgument( 0 );
             if (argExpr instanceof NameExpr) {
                 String updatedVar = ( (NameExpr) argExpr ).getNameAsString();
-                Class<?> updatedClass = context.declarations.get( updatedVar ).declarationClass;
+                Class<?> updatedClass = context.declarations.get( updatedVar ).get().declarationClass;
 
                 MethodCallExpr bitMaskCreation = new MethodCallExpr( new NameExpr( BitMask.class.getCanonicalName() ), "getPatternMask" );
                 bitMaskCreation.addArgument( new ClassExpr( JavaParser.parseClassOrInterfaceType( updatedClass.getCanonicalName() ) ) );
@@ -341,7 +348,7 @@ public class ModelGenerator {
             final MethodCallExpr methodCallExpr = (MethodCallExpr) expr;
 
             final NameExpr scope = (NameExpr) methodCallExpr.getScope().orElseThrow(UnsupportedOperationException::new);
-            final Class clazz =  context.declarations.get(scope.getName().asString()).declarationClass;
+            final Class clazz =  context.declarations.get(scope.getName().asString()).get().declarationClass;
 
             LambdaExpr lambdaExpr = new LambdaExpr();
             lambdaExpr.setEnclosingParameters( true );
@@ -365,7 +372,7 @@ public class ModelGenerator {
                 throw new UnsupportedOperationException("Aggregate function result type", e);
             }
             varType.setTypeArguments(declType);
-            VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "$sum", Modifier.FINAL);
+            VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "var_" + function.getBind(), Modifier.FINAL);
 
             MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
             MethodCallExpr typeCall = new MethodCallExpr(null, "type");
@@ -376,10 +383,12 @@ public class ModelGenerator {
             AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
             context.getRuleBlock().addStatement(var_assign);
 
+            context.declarations.put(function.getBind(), Optional.empty());
+
         }
 
         final MethodCallExpr asDSL = new MethodCallExpr(functionDSL, "as");
-        asDSL.addArgument(new NameExpr(function.getBind()));
+        asDSL.addArgument(new NameExpr("var_"+ function.getBind()));
 
 
 
@@ -439,7 +448,7 @@ public class ModelGenerator {
 
         // Accumulate has a PatternDescr that should be ignore with inside the AccumulateDescr
         PatternSourceDescr source = pattern.getSource();
-        if(source != null) {
+        if(source != null && source instanceof AccumulateDescr) {
             visit(context, source);
             return;
         }
@@ -452,7 +461,7 @@ public class ModelGenerator {
         }
 
         if (pattern.getIdentifier() != null) {
-            context.declarations.put( pattern.getIdentifier(), new DeclarationSpec( patternType, pattern ) );
+            context.declarations.put( pattern.getIdentifier(), Optional.of(new DeclarationSpec( patternType, pattern )) );
         }
 
         if (pattern.getConstraint().getDescrs().isEmpty()) {
@@ -546,7 +555,12 @@ public class ModelGenerator {
 
         if (drlxExpr instanceof MethodCallExpr) {
             MethodCallExpr methodCallExpr = (MethodCallExpr)drlxExpr;
-            return buildDslExpression(patternType, exprId, bindingId, null, new HashSet<>(), new HashSet<>(), null, null, methodCallExpr, false);
+
+            NameExpr _this = new NameExpr("_this");
+
+            MethodCallExpr withThis = DrlxParseUtil.preprendNameExprToMethodCallExpr(_this, methodCallExpr);
+
+            return buildDslExpression(patternType, exprId, bindingId, null, new HashSet<>(), new HashSet<>(), null, null, withThis, false);
         }
 
         throw new UnsupportedOperationException("Unknown expression: " + toDrlx(drlxExpr)); // TODO
@@ -622,11 +636,7 @@ public class ModelGenerator {
         if (!isStatic) {
             LambdaExpr lambdaExpr = new LambdaExpr();
             lambdaExpr.setEnclosingParameters( true );
-            if(bindingId != null && !"".equals(bindingId)) {
-                lambdaExpr.addParameter( new Parameter( new TypeParameter(patternType.getName()), bindingId ) );
-            } else {
-                lambdaExpr.addParameter( new Parameter( new UnknownType(), "_this" ) );
-            }
+            lambdaExpr.addParameter( new Parameter( new UnknownType(), "_this" ) );
             usedDeclarations.stream().map( s -> new Parameter( new UnknownType(), s ) ).forEach( lambdaExpr::addParameter );
             lambdaExpr.setBody( new ExpressionStmt( expr ) );
             exprArg = lambdaExpr;
@@ -695,7 +705,7 @@ public class ModelGenerator {
         private DRLExprIdGenerator exprIdGenerator;
         private BlockStmt ruleBlock;
 
-        Map<String, DeclarationSpec> declarations = new HashMap<>();
+        Map<String, Optional<DeclarationSpec>> declarations = new HashMap<>();
         Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
         List<Expression> expressions = new ArrayList<>();
 
