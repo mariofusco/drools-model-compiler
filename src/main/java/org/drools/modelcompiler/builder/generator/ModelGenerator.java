@@ -61,6 +61,7 @@ import org.drools.javaparser.ast.stmt.BlockStmt;
 import org.drools.javaparser.ast.stmt.ExpressionStmt;
 import org.drools.javaparser.ast.stmt.ReturnStmt;
 import org.drools.javaparser.ast.type.ClassOrInterfaceType;
+import org.drools.javaparser.ast.type.TypeParameter;
 import org.drools.javaparser.ast.type.UnknownType;
 import org.drools.model.BitMask;
 import org.drools.model.Rule;
@@ -325,32 +326,33 @@ public class ModelGenerator {
     }
 
     private static void visit(RuleContext context, AccumulateDescr.AccumulateFunctionCallDescr function, MethodCallExpr accumulateDSL) {
-        context.pushExprPointer(accumulateDSL::addArgument);
-        final MethodCallExpr functionDSL = new MethodCallExpr(null, function.getFunction());
-        context.addExpression(functionDSL);
 
-        context.pushExprPointer(functionDSL::addArgument);
+        context.pushExprPointer(accumulateDSL::addArgument);
+
+        final MethodCallExpr functionDSL = new MethodCallExpr(null, function.getFunction());
 
         final Expression expr = DrlxParser.parseExpression(function.getParams()[0]);
-
-
         if(expr instanceof MethodCallExpr) {
             final MethodCallExpr methodCallExpr = (MethodCallExpr) expr;
 
             final NameExpr scope = (NameExpr) methodCallExpr.getScope().orElseThrow(UnsupportedOperationException::new);
             final Class clazz =  context.declarations.get(scope.getName().asString()).declarationClass;
 
-            TypedExpression left = DrlxParseUtil.toTypedExpression( context, clazz,  expr, context.declarations.keySet(), new HashSet<>() );
+            LambdaExpr lambdaExpr = new LambdaExpr();
+            lambdaExpr.setEnclosingParameters( true );
+            lambdaExpr.addParameter( new Parameter( new TypeParameter(clazz.getName()), "$p" ) );
 
-            System.out.println("left = " + left);
+            lambdaExpr.setBody(new ExpressionStmt(methodCallExpr));
 
+            functionDSL.addArgument(lambdaExpr);
         }
 
+        final MethodCallExpr asDSL = new MethodCallExpr(functionDSL, "as");
+        asDSL.addArgument(new NameExpr(function.getBind()));
+
+        accumulateDSL.addArgument(asDSL);
 
         context.popExprPointer();
-
-        context.popExprPointer();
-
 
     }
 
