@@ -684,8 +684,6 @@ public class CompilerTest {
 
         KieSession ksession = getKieSession( str );
 
-        ReteDumper.dumpRete( ksession );
-
         ksession.insert( new Person( "Mark", 39 ) );
         ksession.insert( new Person( "Mario", 41 ) );
 

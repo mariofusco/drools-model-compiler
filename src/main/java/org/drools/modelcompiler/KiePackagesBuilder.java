@@ -16,10 +16,12 @@
 
 package org.drools.modelcompiler;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -40,6 +42,8 @@ import org.drools.core.rule.EntryPointId;
 import org.drools.core.rule.GroupElement;
 import org.drools.core.rule.MultiAccumulate;
 import org.drools.core.rule.Pattern;
+import org.drools.core.rule.QueryArgument;
+import org.drools.core.rule.QueryElement;
 import org.drools.core.rule.QueryImpl;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.rule.SingleAccumulate;
@@ -51,9 +55,9 @@ import org.drools.core.ruleunit.RuleUnitUtil;
 import org.drools.core.spi.Accumulator;
 import org.drools.core.spi.GlobalExtractor;
 import org.drools.core.spi.InternalReadAccessor;
-import org.drools.core.spi.ObjectType;
 import org.drools.model.AccumulateFunction;
 import org.drools.model.AccumulatePattern;
+import org.drools.model.Argument;
 import org.drools.model.Condition;
 import org.drools.model.Consequence;
 import org.drools.model.Constraint;
@@ -64,6 +68,7 @@ import org.drools.model.OOPath;
 import org.drools.model.Query;
 import org.drools.model.Rule;
 import org.drools.model.SingleConstraint;
+import org.drools.model.Value;
 import org.drools.model.Variable;
 import org.drools.model.View;
 import org.drools.model.WindowDefinition;
@@ -71,6 +76,7 @@ import org.drools.model.WindowReference;
 import org.drools.model.constraints.SingleConstraint1;
 import org.drools.model.functions.Predicate1;
 import org.drools.model.impl.DeclarationImpl;
+import org.drools.model.patterns.QueryCallPattern;
 import org.drools.modelcompiler.consequence.LambdaConsequence;
 import org.drools.modelcompiler.constraints.ConstraintEvaluator;
 import org.drools.modelcompiler.constraints.LambdaAccumulator;
@@ -152,7 +158,6 @@ public class KiePackagesBuilder {
     }
 
     private void addQueryPattern( Query query, QueryImpl queryImpl, RuleContext ctx ) {
-        ObjectType queryObjectType = ClassObjectType.DroolsQuery_ObjectType;
         Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
                                        0, // offset is 0 by default
                                        ClassObjectType.DroolsQuery_ObjectType,
@@ -193,6 +198,17 @@ public class KiePackagesBuilder {
             lhs.addChild( addPatternForVariable( ctx, getUnitVariable( ctx, pkg, view ) ) );
         }
         view.getSubConditions().forEach( condition -> lhs.addChild( conditionToElement(ctx, condition) ) );
+        if (requiresLeftActivation(lhs)) {
+            lhs.addChild( 0, new Pattern( 0, ClassObjectType.InitialFact_ObjectType ) );
+        }
+    }
+
+    private boolean requiresLeftActivation( RuleConditionElement rce ) {
+        if (rce instanceof GroupElement) {
+            GroupElement and = (GroupElement) rce;
+            return and.getChildren().isEmpty() || requiresLeftActivation( and.getChildren().get( 0 ) );
+        }
+        return rce instanceof QueryElement;
     }
 
     private Variable getUnitVariable( RuleContext ctx, KnowledgePackageImpl pkg, View view ) {
@@ -234,6 +250,8 @@ public class KiePackagesBuilder {
                 pattern.setSource( new EntryPointId( ctx.getRule().getRuleUnitClassName() + "." + ooPath.getSource().getName() ) );
                 return pattern;
             }
+            case QUERY:
+                return buildQueryPattern( ctx, ( (QueryCallPattern) condition ) );
             case NOT:
             case EXISTS: {
                 GroupElement ge = new GroupElement( conditionToGroupElementType( condition.getType() ) );
@@ -243,6 +261,40 @@ public class KiePackagesBuilder {
             }
         }
         throw new UnsupportedOperationException();
+    }
+
+    private RuleConditionElement buildQueryPattern( RuleContext ctx, QueryCallPattern queryPattern ) {
+        Pattern pattern = new Pattern( ctx.getNextPatternIndex(),
+                                       0,
+                                       ClassObjectType.ObjectArray_ObjectType,
+                                       null );
+
+        InternalReadAccessor arrayReader = new SelfReferenceClassFieldReader( Object[].class );
+        QueryArgument[] arguments = new QueryArgument[queryPattern.getArguments().length];
+        List<Integer> varIndexList = new ArrayList<>();
+
+        for (int i = 0; i < queryPattern.getArguments().length; i++) {
+            Argument arg = queryPattern.getArguments()[i];
+            if (arg instanceof Variable ) {
+                ArrayElementReader reader = new ArrayElementReader( arrayReader,
+                                                                    i,
+                                                                    arg.getType().asClass() );
+                pattern.addDeclaration( ( (Variable) arg ).getName() ).setReadAccessor( reader );
+                arguments[i] = QueryArgument.VAR;
+                varIndexList.add(i);
+            } else if (arg instanceof Value ) {
+                arguments[i] = new QueryArgument.Literal( ( (Value) arg ).getValue() );
+            } else {
+                throw new UnsupportedOperationException();
+            }
+        }
+        return new QueryElement( pattern,
+                                 queryPattern.getQuery().getName(),
+                                 arguments,
+                                 varIndexList.stream().mapToInt(i->i).toArray(),
+                                 new Declaration[0], // TODO: requiredDeclarations.toArray( new Declaration[requiredDeclarations.size()] ),
+                                 true, // TODO: openQuery
+                                 false ); // TODO: query.isAbductive() );
     }
 
     private Pattern buildPattern( RuleContext ctx, Condition condition ) {

@@ -16,6 +16,8 @@
 
 package org.drools.modelcompiler;
 
+import java.util.Collection;
+
 import org.drools.core.reteoo.AlphaNode;
 import org.drools.model.Global;
 import org.drools.model.Index.ConstraintType;
@@ -26,7 +28,6 @@ import org.drools.model.Rule;
 import org.drools.model.Variable;
 import org.drools.model.impl.ModelImpl;
 import org.drools.modelcompiler.builder.KieBaseBuilder;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.kie.api.KieBase;
 import org.kie.api.runtime.ClassObjectFilter;
@@ -401,8 +402,6 @@ public class FlowTest {
 
         KieSession ksession = kieBase.newKieSession();
 
-        ReteDumper.dumpRete( ksession );
-
         ksession.insert( new Person( "Mark", 39 ) );
         ksession.insert( new Person( "Mario", 41 ) );
 
@@ -414,12 +413,11 @@ public class FlowTest {
     }
 
     @Test
-    @Ignore("TODO")
     public void testQueryInRule() {
         Variable<Person> personV = declarationOf( type( Person.class ) );
         Variable<Integer> ageV = declarationOf( type( Integer.class ) );
 
-        Query2<Person, Integer> query = query( "Q", personV, ageV )
+        Query2<Person, Integer> query = query( "olderThan", personV, ageV )
                 .view( expr("exprA", personV, ageV, (p, a) -> p.getAge() > a) );
 
         Rule rule = rule("R")
@@ -432,7 +430,13 @@ public class FlowTest {
 
         KieSession ksession = kieBase.newKieSession();
 
-        Result result = (Result) ksession.getObjects(new ClassObjectFilter( Result.class ) ).iterator().next();
-        assertEquals( "Mario", result.getValue() );
+        ksession.insert( new Person( "Mark", 39 ) );
+        ksession.insert( new Person( "Mario", 41 ) );
+
+        ksession.fireAllRules();
+
+        Collection<Result> results = (Collection<Result>) ksession.getObjects( new ClassObjectFilter( Result.class ) );
+        assertEquals( 1, results.size() );
+        assertEquals( "Mario", results.iterator().next().getValue() );
     }
 }
