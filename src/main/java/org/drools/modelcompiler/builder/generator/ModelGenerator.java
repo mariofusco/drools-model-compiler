@@ -61,6 +61,7 @@ import org.drools.javaparser.ast.stmt.BlockStmt;
 import org.drools.javaparser.ast.stmt.ExpressionStmt;
 import org.drools.javaparser.ast.stmt.ReturnStmt;
 import org.drools.javaparser.ast.type.ClassOrInterfaceType;
+import org.drools.javaparser.ast.type.PrimitiveType;
 import org.drools.javaparser.ast.type.Type;
 import org.drools.javaparser.ast.type.TypeParameter;
 import org.drools.javaparser.ast.type.UnknownType;
@@ -353,7 +354,13 @@ public class ModelGenerator {
             ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
             Type declType;
             try {
-                declType = JavaParser.parseType(clazz.getMethod(methodCallExpr.getName().asString()).getReturnType().getCanonicalName());
+                Type parsedType = JavaParser.parseType(clazz.getMethod(methodCallExpr.getName().asString()).getReturnType().getCanonicalName());
+                if(parsedType instanceof PrimitiveType) {
+                    declType = ((PrimitiveType)parsedType).toBoxedType();
+                } else {
+                    declType = parsedType.getElementType();
+                }
+
             } catch ( NoSuchMethodException e ) {
                 throw new UnsupportedOperationException("Aggregate function result type", e);
             }
@@ -362,7 +369,9 @@ public class ModelGenerator {
 
             MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
             MethodCallExpr typeCall = new MethodCallExpr(null, "type");
+            typeCall.addArgument( new ClassExpr( declType ));
             declarationOfCall.addArgument(typeCall);
+
 
             AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
             context.getRuleBlock().addStatement(var_assign);
