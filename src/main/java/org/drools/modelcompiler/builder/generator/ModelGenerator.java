@@ -28,7 +28,6 @@ import org.drools.compiler.lang.descr.ExistsDescr;
 import org.drools.compiler.lang.descr.NotDescr;
 import org.drools.compiler.lang.descr.OrDescr;
 import org.drools.compiler.lang.descr.PatternDescr;
-import org.drools.compiler.lang.descr.PatternSourceDescr;
 import org.drools.compiler.lang.descr.RelationalExprDescr;
 import org.drools.compiler.lang.descr.RuleDescr;
 import org.drools.core.definitions.InternalKnowledgePackage;
@@ -313,14 +312,14 @@ public class ModelGenerator {
             visit( context, ( (AndDescr) descr ));
         } else if ( descr instanceof OrDescr) {
             visit( context, ( (OrDescr) descr ));
-        } else if ( descr instanceof PatternDescr) {
+        } else if ( descr instanceof PatternDescr && ((PatternDescr)descr).getSource() instanceof AccumulateDescr) {
+            visit( context, ( (AccumulateDescr)((PatternDescr) descr).getSource() ));
+        } else if ( descr instanceof PatternDescr ) {
             visit( context, ( (PatternDescr) descr ));
         } else if ( descr instanceof NotDescr) {
             visit( context, ( (NotDescr) descr ));
         } else if ( descr instanceof ExistsDescr) {
             visit( context, ( (ExistsDescr) descr ));
-        } else if ( descr instanceof AccumulateDescr) {
-            visit( context, ( (AccumulateDescr) descr ));
         } else {
             throw new UnsupportedOperationException("TODO"); // TODO
         }
@@ -445,14 +444,6 @@ public class ModelGenerator {
     }
 
     private static void visit(RuleContext context, PatternDescr pattern ) {
-
-        // Accumulate has a PatternDescr that should be ignore with inside the AccumulateDescr
-        PatternSourceDescr source = pattern.getSource();
-        if(source != null && source instanceof AccumulateDescr) {
-            visit(context, source);
-            return;
-        }
-
         Class<?> patternType;
         try {
             patternType = context.pkg.getTypeResolver().resolveType( pattern.getObjectType() );
