@@ -16,9 +16,8 @@
 
 package org.drools.modelcompiler;
 
-import java.util.Collection;
-
 import org.drools.core.reteoo.AlphaNode;
+import org.drools.javaparser.JavaParser;
 import org.drools.model.Global;
 import org.drools.model.Index.ConstraintType;
 import org.drools.model.Model;
@@ -35,9 +34,9 @@ import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.FactHandle;
 import org.kie.api.runtime.rule.QueryResults;
 
+import java.util.Collection;
+
 import static org.drools.model.DSL.*;
-import static org.drools.model.functions.accumulate.Average.avg;
-import static org.drools.model.functions.accumulate.Sum.sum;
 import static org.junit.Assert.*;
 
 public class FlowTest {
@@ -255,9 +254,28 @@ public class FlowTest {
         Rule rule = rule("accumulate")
                 .view(
                         accumulate(expr(person, p -> p.getName().startsWith("M")),
-                                   sum(Person::getAge).as(resultSum))
+                                   sum((Person p) -> p.getAge()).as(resultSum))
                      )
                 .then( on(resultSum).execute(sum -> result.value = "total = " + sum) );
+
+
+        // TODO: Remove this
+        final Object parsed = JavaParser.parseBlock("{" +
+                "        Rule rule = rule(\"accumulate\")\n" +
+                "                .view(\n" +
+                "                        accumulate(expr(person, p -> p.getName().startsWith(\"M\")),\n" +
+                "                                   sum((Person p) -> p.getAge()).as(resultSum))\n" +
+                "                     )\n" +
+                "                .then( on(resultSum).execute(sum -> result.value = \"total = \" + sum) );" +
+                "}" +
+                "");
+
+
+        System.out.println("\n\n\n\n\n\n\n");
+        System.out.println("parsed = " + parsed);
+        System.out.println("\n\n\n\n\n\n\n");
+
+
 
         Model model = new ModelImpl().addRule( rule );
         KieBase kieBase = KieBaseBuilder.createKieBaseFromModel( model );

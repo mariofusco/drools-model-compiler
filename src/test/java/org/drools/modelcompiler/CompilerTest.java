@@ -16,14 +16,6 @@
 
 package org.drools.modelcompiler;
 
-import java.io.File;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
 import org.drools.compiler.kie.builder.impl.KieBuilderImpl;
 import org.drools.core.ClockType;
@@ -51,6 +43,14 @@ import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.conf.ClockTypeOption;
 import org.kie.api.runtime.rule.QueryResults;
 import org.kie.api.time.SessionPseudoClock;
+
+import java.io.File;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
 
@@ -748,5 +748,31 @@ public class CompilerTest {
         Collection<Result> results = getObjects( ksession, Result.class );
         assertEquals( 1, results.size() );
         assertEquals( "Mario", results.iterator().next().getValue() );
+    }
+
+    @Test
+    public void testAccumulate1() {
+        String str =
+                "import " + Person.class.getCanonicalName() + ";" +
+                "import " + Result.class.getCanonicalName() + ";" +
+                "rule X when\n" +
+                 "  accumulate ( $p: Person ( getName().startsWith(\"M\")); \n" +
+                "                $sum : sum($p.getAge())  \n" +
+                "              )                          \n" +
+                "then\n" +
+                "  insert(new Result($sum));\n" +
+                "end";
+
+        KieSession ksession = getKieSession( str );
+
+        ksession.insert(new Person("Mark", 37));
+        ksession.insert(new Person("Edson", 35));
+        ksession.insert(new Person("Mario", 40));
+
+        ksession.fireAllRules();
+
+        Collection<Result> results = getObjects(ksession, Result.class);
+        assertEquals(1, results.size());
+        assertEquals(77, results.iterator().next().getValue());
     }
 }
