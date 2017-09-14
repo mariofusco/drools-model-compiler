@@ -16,8 +16,6 @@
 
 package org.drools.modelcompiler;
 
-import java.util.Collection;
-
 import org.drools.core.reteoo.AlphaNode;
 import org.drools.javaparser.JavaParser;
 import org.drools.model.Global;
@@ -36,8 +34,9 @@ import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.FactHandle;
 import org.kie.api.runtime.rule.QueryResults;
 
+import java.util.Collection;
+
 import static org.drools.model.DSL.*;
-import static org.drools.model.functions.accumulate.Average.avg;
 import static org.junit.Assert.*;
 
 public class FlowTest {
