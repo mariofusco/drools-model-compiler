@@ -113,7 +113,7 @@ public class DrlxParseUtil {
                     // because reactOnProperties is referring only to the properties of the type of the pattern, not other declarations properites.
                     usedDeclarations.add( firstName );
                     if (!isInLineCast) {
-                        typeCursor = context.declarations.get( firstName ).get().declarationClass;
+                        typeCursor = context.declarations.get( firstName ).declarationClass;
                     }
                     previous = new NameExpr( firstName );
                 } else {

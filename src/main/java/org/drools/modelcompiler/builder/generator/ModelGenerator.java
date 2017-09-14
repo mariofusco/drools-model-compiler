@@ -73,6 +73,7 @@ import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -121,9 +122,8 @@ public class ModelGenerator {
             Set<Entry<String, DeclarationSpec>> declarations =
                     context.declarations.entrySet()
                             .stream()
-                            .filter(d -> d.getValue().isPresent())
-                            .collect(Collectors.toMap(Entry::getKey, e -> e.getValue().get()))
-                            .entrySet();
+                            .filter(d -> d.getValue().optPattern.isPresent())
+                            .collect(Collectors.toSet());
 
             for ( Entry<String, DeclarationSpec> decl : declarations ) {
                 ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
@@ -269,7 +269,7 @@ public class ModelGenerator {
             Expression argExpr = updateExpr.getArgument( 0 );
             if (argExpr instanceof NameExpr) {
                 String updatedVar = ( (NameExpr) argExpr ).getNameAsString();
-                Class<?> updatedClass = context.declarations.get( updatedVar ).get().declarationClass;
+                Class<?> updatedClass = context.declarations.get( updatedVar ).declarationClass;
 
                 MethodCallExpr bitMaskCreation = new MethodCallExpr( new NameExpr( BitMask.class.getCanonicalName() ), "getPatternMask" );
                 bitMaskCreation.addArgument( new ClassExpr( JavaParser.parseClassOrInterfaceType( updatedClass.getCanonicalName() ) ) );
@@ -348,7 +348,7 @@ public class ModelGenerator {
             final MethodCallExpr methodCallExpr = (MethodCallExpr) expr;
 
             final NameExpr scope = (NameExpr) methodCallExpr.getScope().orElseThrow(UnsupportedOperationException::new);
-            final Class clazz =  context.declarations.get(scope.getName().asString()).get().declarationClass;
+            final Class clazz =  context.declarations.get(scope.getName().asString()).declarationClass;
 
             LambdaExpr lambdaExpr = new LambdaExpr();
             lambdaExpr.setEnclosingParameters( true );
@@ -383,7 +383,7 @@ public class ModelGenerator {
             AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
             context.getRuleBlock().addStatement(var_assign);
 
-            context.declarations.put(function.getBind(), Optional.empty());
+            context.declarations.put(function.getBind(), new DeclarationSpec(clazz));
 
         }
 
@@ -461,7 +461,7 @@ public class ModelGenerator {
         }
 
         if (pattern.getIdentifier() != null) {
-            context.declarations.put( pattern.getIdentifier(), Optional.of(new DeclarationSpec( patternType, pattern )) );
+            context.declarations.put( pattern.getIdentifier(), new DeclarationSpec( patternType, pattern ));
         }
 
         if (pattern.getConstraint().getDescrs().isEmpty()) {
@@ -705,7 +705,7 @@ public class ModelGenerator {
         private DRLExprIdGenerator exprIdGenerator;
         private BlockStmt ruleBlock;
 
-        Map<String, Optional<DeclarationSpec>> declarations = new HashMap<>();
+        Map<String, DeclarationSpec> declarations = new HashMap<>();
         Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
         List<Expression> expressions = new ArrayList<>();
 
@@ -745,19 +745,31 @@ public class ModelGenerator {
 
     public static class DeclarationSpec {
         final Class<?> declarationClass;
-        final PatternDescr pattern;
+        final Optional<PatternDescr> optPattern;
 
         public DeclarationSpec( Class<?> declarationClass, PatternDescr pattern ) {
             this.declarationClass = declarationClass;
-            this.pattern = pattern;
+            this.optPattern = Optional.of(pattern);
+        }
+
+        public DeclarationSpec( Class<?> declarationClass) {
+            this.declarationClass = declarationClass;
+            this.optPattern = Optional.empty();
         }
 
         String getEntryPoint() {
-            return pattern.getSource() instanceof EntryPointDescr ? ( (EntryPointDescr) pattern.getSource() ).getEntryId() : null;
+            return optPattern.map(pattern -> {
+                if(pattern.getSource() instanceof EntryPointDescr) {
+                    return ((EntryPointDescr) pattern.getSource()).getEntryId();
+                } else {
+                    return null;
+                }
+            }).orElse(null);
         }
 
         public List<BehaviorDescr> getBehaviors() {
-            return pattern.getBehaviors();
+            return optPattern.map(PatternDescr::getBehaviors).orElse(Collections.emptyList());
+
         }
     }
 }
