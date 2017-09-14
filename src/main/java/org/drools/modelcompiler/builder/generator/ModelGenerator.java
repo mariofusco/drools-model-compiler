@@ -16,6 +16,23 @@
 
 package org.drools.modelcompiler.builder.generator;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AccumulateDescr;
 import org.drools.compiler.lang.descr.AndDescr;
@@ -71,23 +88,6 @@ import org.drools.modelcompiler.builder.PackageModel;
 import org.drools.modelcompiler.builder.RuleDescrImpl;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import static org.drools.javaparser.printer.PrintUtil.toDrlx;
 import static org.drools.modelcompiler.builder.generator.StringUtil.toId;
 
@@ -113,20 +113,13 @@ public class ModelGenerator {
             BlockStmt ruleBlock = new BlockStmt();
             ruleMethod.setBody(ruleBlock);
 
-            RuleContext context = new RuleContext( pkg, packageModel.getExprIdGenerator(), ruleBlock);
+            RuleContext context = new RuleContext( pkg, packageModel.getExprIdGenerator() );
 
-//            visit(context, descr.getImpl().getLhs());
             visit(context, ruleDescr.getLhs());
 
-            Set<Entry<String, DeclarationSpec>> declarations =
-                    context.declarations.entrySet()
-                            .stream()
-                            .filter(d -> d.getValue().optPattern.isPresent())
-                            .collect(Collectors.toSet());
-
-            for ( Entry<String, DeclarationSpec> decl : declarations ) {
+            for ( Entry<String, DeclarationSpec> decl : context.declarations.entrySet() ) {
                 ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
-                ClassOrInterfaceType declType = JavaParser.parseClassOrInterfaceType( decl.getValue().declarationClass.getCanonicalName() );
+                Type declType = classToReferenceType( decl.getValue().declarationClass );
 
                 varType.setTypeArguments(declType);
                 VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "var_" + decl.getKey(), Modifier.FINAL);
@@ -135,11 +128,11 @@ public class ModelGenerator {
                 MethodCallExpr typeCall = new MethodCallExpr(null, "type");
                 typeCall.addArgument( new ClassExpr( declType ));
                 declarationOfCall.addArgument(typeCall);
-                if (decl.getValue().getEntryPoint() != null) {
+                decl.getValue().getEntryPoint().ifPresent( ep -> {
                     MethodCallExpr entryPointCall = new MethodCallExpr(null, "entryPoint");
-                    entryPointCall.addArgument( new StringLiteralExpr( decl.getValue().getEntryPoint() ) );
+                    entryPointCall.addArgument( new StringLiteralExpr( ep ) );
                     declarationOfCall.addArgument( entryPointCall );
-                }
+                } );
                 for ( BehaviorDescr behaviorDescr : decl.getValue().getBehaviors() ) {
                     MethodCallExpr windowCall = new MethodCallExpr(null, "window");
                     if ( Behavior.BehaviorType.TIME_WINDOW.matches( behaviorDescr.getSubType() ) ) {
@@ -357,44 +350,27 @@ public class ModelGenerator {
 
             functionDSL.addArgument(lambdaExpr);
 
-            ClassOrInterfaceType varType = JavaParser.parseClassOrInterfaceType(Variable.class.getCanonicalName());
-            Type declType;
             try {
-                Type parsedType = JavaParser.parseType(clazz.getMethod(methodCallExpr.getName().asString()).getReturnType().getCanonicalName());
-                if(parsedType instanceof PrimitiveType) {
-                    declType = ((PrimitiveType)parsedType).toBoxedType();
-                } else {
-                    declType = parsedType.getElementType();
-                }
-
+                Class<?> declClass = clazz.getMethod(methodCallExpr.getName().asString()).getReturnType();
+                context.declarations.put(function.getBind(), new DeclarationSpec(declClass));
             } catch ( NoSuchMethodException e ) {
                 throw new UnsupportedOperationException("Aggregate function result type", e);
             }
-            varType.setTypeArguments(declType);
-            VariableDeclarationExpr var_ = new VariableDeclarationExpr(varType, "var_" + function.getBind(), Modifier.FINAL);
-
-            MethodCallExpr declarationOfCall = new MethodCallExpr(null, "declarationOf");
-            MethodCallExpr typeCall = new MethodCallExpr(null, "type");
-            typeCall.addArgument( new ClassExpr( declType ));
-            declarationOfCall.addArgument(typeCall);
-
-
-            AssignExpr var_assign = new AssignExpr(var_, declarationOfCall, AssignExpr.Operator.ASSIGN);
-            context.getRuleBlock().addStatement(var_assign);
-
-            context.declarations.put(function.getBind(), new DeclarationSpec(clazz));
-
         }
 
         final MethodCallExpr asDSL = new MethodCallExpr(functionDSL, "as");
         asDSL.addArgument(new NameExpr("var_"+ function.getBind()));
 
-
-
         accumulateDSL.addArgument(asDSL);
 
         context.popExprPointer();
+    }
 
+    private static Type classToReferenceType( Class<?> declClass ) {
+        Type parsedType = JavaParser.parseType( declClass.getCanonicalName() );
+        return parsedType instanceof PrimitiveType ?
+               ((PrimitiveType)parsedType).toBoxedType() :
+               parsedType.getElementType();
     }
 
     private static void visit( RuleContext context, NotDescr descr ) {
@@ -482,7 +458,7 @@ public class ModelGenerator {
     private static Expression drlxParse(RuleContext context, Class<?> patternType, String bindingId, String expression) {
         Expression drlxExpr = DrlxParser.parseExpression( expression );
 
-        String exprId = null;
+        String exprId;
         if ( GENERATE_EXPR_ID ) {
             exprId = context.getExprId( patternType, expression );
         }
@@ -694,17 +670,15 @@ public class ModelGenerator {
     public static class RuleContext {
         private final InternalKnowledgePackage pkg;
         private DRLExprIdGenerator exprIdGenerator;
-        private BlockStmt ruleBlock;
 
         Map<String, DeclarationSpec> declarations = new HashMap<>();
         Deque<Consumer<Expression>> exprPointer = new LinkedList<>();
         List<Expression> expressions = new ArrayList<>();
 
-        public RuleContext(InternalKnowledgePackage pkg, DRLExprIdGenerator exprIdGenerator, BlockStmt ruleBlock) {
+        public RuleContext(InternalKnowledgePackage pkg, DRLExprIdGenerator exprIdGenerator) {
             this.pkg = pkg;
             this.exprIdGenerator = exprIdGenerator;
             exprPointer.push( this.expressions::add );
-            this.ruleBlock = ruleBlock;
         }
 
         public void addExpression(Expression e) {
@@ -727,11 +701,6 @@ public class ModelGenerator {
         public String getExprId(Class<?> patternType, String drlConstraint) {
             return exprIdGenerator.getExprId(patternType, drlConstraint);
         }
-
-        public BlockStmt getRuleBlock() {
-            return ruleBlock;
-        }
-
     }
 
     public static class DeclarationSpec {
@@ -743,19 +712,16 @@ public class ModelGenerator {
             this.optPattern = Optional.of(pattern);
         }
 
-        public DeclarationSpec( Class<?> declarationClass) {
+        public DeclarationSpec( Class<?> declarationClass ) {
             this.declarationClass = declarationClass;
             this.optPattern = Optional.empty();
         }
 
-        String getEntryPoint() {
-            return optPattern.map(pattern -> {
-                if(pattern.getSource() instanceof EntryPointDescr) {
-                    return ((EntryPointDescr) pattern.getSource()).getEntryId();
-                } else {
-                    return null;
-                }
-            }).orElse(null);
+        Optional<String> getEntryPoint() {
+            return optPattern.flatMap(pattern -> pattern.getSource() instanceof EntryPointDescr ?
+                                                    Optional.of(((EntryPointDescr) pattern.getSource()).getEntryId()) :
+                                                    Optional.empty()
+            );
         }
 
         public List<BehaviorDescr> getBehaviors() {
